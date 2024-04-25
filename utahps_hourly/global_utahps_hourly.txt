@@ -1,0 +1,22 @@
+# Project: 		Hydraulic Economic River System Simulator (HERSS)
+# Programmer: 	Bernt Viggo Matheussen, 4 March, 2024.
+#               Global configuration file for the Upper Tovdalen Artificial Hydro Power System (uTAHPS) 
+
+SYSTEMNAME uTAHPS
+
+# Input
+INPUTDIR ./
+ACTIONFILE actions_utahps.txt
+INFLOWFILE inflowseries_utahps.txt
+PRICEFILE pricefile_utahps.txt
+TOPOLOGYFILE topology_utahps.txt
+STARTSTATEFILE start_state_utahps.txt
+
+# Timestep length [seconds] 
+DT 3600
+
+# Output information 
+OUTPUTFILE output_utahps.txt 
+OUTSTATEFILE outstate_utahps.txt
+WRITE_NODEFILES 1
+OUTPUTDIR ./output/
