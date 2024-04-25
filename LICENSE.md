@@ -1,6 +1,9 @@
 Project:      The Hydraulic Economic River System Simulator (HERSS)
+
 Filename:     LICENSE.md                                                        
+
 Developer:    Bernt Viggo Matheussen (Bernt.Viggo.Matheussen@aenergi.no)
+
 Organization: Å Energi, www.ae.no
 
 This software is released under the MIT license:
