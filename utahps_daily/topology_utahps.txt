@@ -1,0 +1,285 @@
+##########################################################################
+# TOPOLOGY FILE Upper Tovdalen Hydro Power System (uTAHPS)
+# BVM 1 Mar, 2024
+# 
+# qmin[m3/s]  start_data[dd.mm] end_data[dd.mm] QMIN_COST[Euro]
+# QMIN 0.1 01.10 15.06 4.0
+##########################################################################
+
+##########################################################################
+# HJELLEVATN RESERVOIR
+# NODE NODETYPE(RESERVOIR/PSTATION/CHANNEL) IDNR NAME
+NODE RESERVOIR 0 HJELLE
+HRW 757.0
+LRW 748.0
+RES_PENALTY 300
+# Reservoir curve points, [masl, Mm3] Curve must go below hatch_masl.
+RESERVOIR_CURVE 7
+747	0.0
+748	1.0
+749	2.37
+750	3.24
+757	10.0
+758	15.0
+760	100
+# Overflow curve, points, downstream idnr   [masl, m3s]
+OVERFLOW_CURVE 3 2
+757	0.0
+758	10.0
+760	200.0
+# Outlet hatch downstream_nodeid, qmin_hatch, qmax_hatch, hatch_masl
+OUTLET_HATCH -9999
+OUTLET_TUNNEL 1
+OUTLET_AUTO_QMIN -9999
+ENDNODE
+########################################################################################
+
+#########################################################################################
+# SVOLETJONN POWERSTATION HJELLEVATN IS INTAKE 
+NODE PSTATION 1 SVOLETJONN
+DOWNLINK_IDNR 2
+# Turbine efficiency curve [M3s, %]
+TURBINE_CURVE 10
+0.00	0
+1.00	50
+1.72	80
+2.27	90
+2.79	93
+3.19	93
+3.47	93
+3.67	92
+3.79	91
+4.00	88
+STATIC_GENERATOR_EFFICIENCY 0.96
+HEADLOSSCOEF 0.3
+POWSTAT_MASL 690.0
+POWSTAT_MIN_DISCHARGE 0.0
+POWSTAT_MAX_DISCHARGE 4.0
+POWSTAT_STARTSTOP 2.0
+LOCAL_ENERGY_EQUIVALENT 0.11
+AUTO_QMIN -9999
+MAX_ADJUST -9999
+ENDNODE
+#########################################################################################
+
+########################################################################################
+# NODE NODETYPE IDNR NAME DOWNSTREAM_NODE_IDNR
+NODE CHANNEL 2 VANAROSEN 4
+TRAVELTIME 1
+DECAY 0.95
+QMIN -9999
+########################################################################################
+
+##########################################################################
+# GRESSE RESERVOIR
+# NODE NODETYPE(RESERVOIR/PSTATION/CHANNEL) IDNR NAME
+NODE RESERVOIR 3 GRESSE
+HRW 749.0
+LRW 740.0
+RES_PENALTY 300
+# Reservoir curve points, [masl, Mm3] Curve must go below hatch_masl.
+RESERVOIR_CURVE 13
+725.00	20.70
+730.00	46.68
+735.00	75.31
+740.00	106.60
+741.00	113.09
+743.00	126.28
+745.00	139.81
+748.00	160.86
+749.00	168.04
+750.00	175.34
+751.00  180.34
+752.00  200.34
+755.00  500.0
+# Overflow curve, points, downstream idnr   [masl, m3s]
+OVERFLOW_CURVE 3 4
+749.00	0.0
+751.00	10.0
+755.00	200.0
+# Outlet hatch downstream_nodeid, qmin_hatch, qmax_hatch, hatch_masl
+OUTLET_HATCH -9999
+OUTLET_TUNNEL 6
+OUTLET_AUTO_QMIN -9999
+ENDNODE
+########################################################################################
+
+########################################################################################
+# NODE NODETYPE IDNR NAME DOWNSTREAM_NODE_IDNR
+# WE REMOVE THIS ONE IN DAILY SIMULATIONS, 
+# NOTE THAT WE NEED TO CHANGE THE IDNR, AND ALSO DOWNSTREAM IDNR
+# NODE CHANNEL 4 GRONANI 5
+# TRAVELTIME 3
+# DECAY 1.0
+# QMIN -9999
+# ENDNODE
+########################################################################################
+
+########################################################################################
+# TOPPSY RESERVOIR
+# NODE NODETYPE(RESERVOIR/PSTATION/CHANNEL) IDNR NAME
+NODE RESERVOIR 4 TOPPSY
+HRW 650.00
+LRW 620.00
+RES_PENALTY 300
+# Reservoir curve, points, [masl, Mm3] Curve must go below hatch_masl.
+RESERVOIR_CURVE 10
+610.00	0.0
+619.00	265.00
+620.00	268.53
+630.00	308.33
+640.00	352.87
+650.00	395.17
+660.00	467.73
+670.00	538.94
+680.00	650.00
+690.00	1000.0
+# Overflow curve, points, downstream idnr [masl, m3s]
+OVERFLOW_CURVE 3 7
+650.00	0.0
+680.00	100.0
+690.00	500.0
+# Outlet hatch downstream_nodeid, qmin_hatch, qmax_hatch, hatch_masl
+OUTLET_HATCH -9999
+OUTLET_TUNNEL 5
+OUTLET_AUTO_QMIN -9999
+ENDNODE
+########################################################################################
+
+#########################################################################################
+# SVEIGSHYL_I POWERSTATION TOPPSE IS INTAKE
+NODE PSTATION 5 SVEIGSHYL_I
+DOWNLINK_IDNR 7
+# Turbine efficiency curve [M3s, %]
+TURBINE_CURVE 10
+0.00	0.0
+1.48	50.0
+2.54	80.0
+3.36	90.0
+4.13	93.0
+4.72	93.0
+5.13	93.0
+5.43	92.0
+5.61	91.0
+5.90	90.0
+STATIC_GENERATOR_EFFICIENCY 0.96
+HEADLOSSCOEF 0.2
+POWSTAT_MASL 581.0
+POWSTAT_MIN_DISCHARGE 0.0
+POWSTAT_MAX_DISCHARGE 5.9
+POWSTAT_STARTSTOP 2.0
+LOCAL_ENERGY_EQUIVALENT 0.11
+AUTO_QMIN -9999
+MAX_ADJUST -9999
+ENDNODE
+#########################################################################################
+
+#########################################################################################
+# SVEIGSHYL_II POWERSTATION GRESSE IS INTAKE 
+NODE PSTATION 6 SVEIGSHYL_II
+DOWNLINK_IDNR 7
+# Turbine efficiency curve [M3s, %]
+TURBINE_CURVE 10
+0.00	0
+0.60	50
+0.72	60
+1.04	70
+1.28	80
+1.52	85
+2.04	90
+2.40	91
+5.76	90
+6.00	89
+STATIC_GENERATOR_EFFICIENCY 0.96
+HEADLOSSCOEF 0.145
+POWSTAT_MASL 581.0
+POWSTAT_MIN_DISCHARGE 0.6
+POWSTAT_MAX_DISCHARGE 6.0
+POWSTAT_STARTSTOP 2.0
+LOCAL_ENERGY_EQUIVALENT 0.39
+AUTO_QMIN -9999
+MAX_ADJUST -9999
+ENDNODE
+#########################################################################################
+
+########################################################################################
+# NODE NODETYPE IDNR NAME DOWNSTREAM_NODE_IDNR
+NODE CHANNEL 7 DALSANA 8
+TRAVELTIME 1
+DECAY 0.95
+QMIN -9999
+ENDNODE
+########################################################################################
+
+##########################################################################
+# KROKNESVATN RESERVOIR
+# NODE NODETYPE(RESERVOIR/PSTATION/CHANNEL) IDNR NAME
+NODE RESERVOIR 8 KROKNESVATN
+HRW 433.00
+LRW 333.00
+RES_PENALTY 300
+# Reservoir curve, points, [masl, Mm3] Curve must go below hatch_masl.
+RESERVOIR_CURVE 14
+300.00	0.0
+333.00	19.30
+343.00	31.08
+353.00	44.75
+363.00	60.14
+373.00	77.21
+383.00	96.01
+393.00	116.70
+403.00	139.28
+413.00	163.78
+423.00	190.23
+433.00	218.57
+435.00  300.0
+440.00  1000.0
+# Overflow curve, points, downstream idnr   [masl, m3s]
+OVERFLOW_CURVE 4 10
+433.0	0.0
+434.0	10.0
+435.0	100.0
+440.0	2000.0
+# Outlet hatch downstream_nodeid, qmin_hatch, qmax_hatch, hatch_masl
+OUTLET_HATCH -9999
+OUTLET_TUNNEL 9
+OUTLET_AUTO_QMIN -9999
+ENDNODE
+#########################################################################################
+
+#########################################################################################
+# AUSTENA POWERSTATION KROKNESVATN IS INTAKE
+NODE PSTATION 9 EASTER
+DOWNLINK_IDNR 10
+# Turbine efficiency curve [M3s, %]
+TURBINE_CURVE 10
+0.00	0.00
+2.45	50.00
+4.21	80.00
+5.59	90.00
+6.86	93.00
+7.84	93.00
+8.53	93.00
+9.02	92.00
+9.31	91.00
+9.80	90.00
+STATIC_GENERATOR_EFFICIENCY 0.96
+HEADLOSSCOEF 0.145
+POWSTAT_MASL 218.0
+POWSTAT_MIN_DISCHARGE 0.0
+POWSTAT_MAX_DISCHARGE 9.8
+POWSTAT_STARTSTOP 2.0
+LOCAL_ENERGY_EQUIVALENT 0.11
+AUTO_QMIN -9999
+MAX_ADJUST -9999
+ENDNODE
+#########################################################################################
+
+########################################################################################
+# NODE NODETYPE IDNR NAME DOWNSTREAM_NODE_IDNR
+NODE CHANNEL 10 HYNNEKLEIV -9
+TRAVELTIME 1
+DECAY 1.0
+QMIN -9999
+ENDNODE
+########################################################################################
