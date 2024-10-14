@@ -34,6 +34,7 @@ Riversystem::Riversystem(){}
 
 Riversystem::Riversystem(GlobalConfig *gc) {
 
+    this->gc = gc;
     this->nr_nodes      = gc->nr_nodes;
     this->nr_reservoirs = gc->nr_reservoirs;
     this->nr_pstations  = gc->nr_pstations;
@@ -92,14 +93,43 @@ Riversystem::~Riversystem(){
     }
 }
 ///////////////////////////////////////////////////////////////////
-int Riversystem::WriteSelectedOutputMatrix(GlobalConfig *gc) {
+int Riversystem::WriteSelectedOutputMatrix() {
     printf("ERROR:    WORK IN PROGRESS\n");
     printf("file: %s  linenr: %d  function: %s \n", __FILE__ , __LINE__, __FUNCTION__);
     exit(EXIT_FAILURE);
    return 0;
 }
 ///////////////////////////////////////////////////////////////////
-void Riversystem::WriteReservoirData(GlobalConfig *gc) {
+// Return the ending reservoir level for the given reservoir idnr. 
+double Riversystem::GetEndingReservoirLevel(size_t r_idnr) {
+    
+    if( r_idnr > (gc->nr_reservoirs-1) ) {
+        printf("ERROR:  You are asking for data that doesnt exist\n");
+        printf("HERSS:  file: %s  linenr: %d  function: %s \n", __FILE__ , __LINE__, __FUNCTION__);
+        exit(EXIT_FAILURE);
+    }
+    
+    return this->reservoirs[r_idnr].S->res_fr[ gc->stps -1];
+}
+///////////////////////////////////////////////////////////////////
+void Riversystem::PrintReservoirData2Screen() {
+    printf("-----   reservoir fractions  -----  \n");
+    for(size_t t = 0; t < gc->stps; t++) {
+        for(size_t r = 0; r < gc->nr_reservoirs; r++) {
+            printf("%.4f ", this->reservoirs[r].S->res_fr[t]);
+        }
+        printf("\n");
+    }
+    printf("-----   Actions  for powerstations  -----  \n");
+    for(size_t t = 0; t < gc->stps; t++) {
+        for(size_t p = 0; p < gc->nr_pstations; p++) {
+            printf("%.4f ", this->pstations[p].S->action[t]);
+        }
+        printf("\n");
+    }
+}
+///////////////////////////////////////////////////////////////////
+void Riversystem::WriteReservoirData() {
 
     FILE *fp;
     char outfilename [100];
@@ -135,7 +165,97 @@ void Riversystem::WriteReservoirData(GlobalConfig *gc) {
 
 }
 ///////////////////////////////////////////////////////////////////
-int Riversystem::WriteRiverSystemData(GlobalConfig *gc, double restprice) {
+// This function returns income and penalties in the simulation period. 
+// Remaining water in the Riversystem is not included.
+double Riversystem::CalcSimulationProfit() {
+    double sim_profit = 0.0;
+    for(size_t n = 0; n < nr_nodes; n++) {
+        for(size_t t = 0; t < gc->stps; t++) {
+            sim_profit += (nodes[n]->S->income[t] - nodes[n]->S->cost[t]);
+        }
+    }
+    return sim_profit;
+}
+//////////////////////////////////////////////////////////////////////
+double Riversystem::CalcVF(double restprice) {
+
+    tot_remaining_available_Mm3  = 0.0;
+    tot_remaining_available_MWh  = 0.0;
+    tot_remaining_available_Euro = 0.0;
+    tot_income_Euro              = 0.0;
+    tot_cost_Euro                = 0.0;
+    tot_profit_Euro              = 0.0;
+    valuefunction_Euro           = 0.0;
+    sum_production               = 0.0;
+
+    // At the most downstream node (OCEAN) the total available water 
+    // is the node available water + upstream available (not included DEAD WATER)
+    tot_remaining_available_Mm3  = nodes[nr_nodes-1]->upstream_remaining_available_Mm3;
+    tot_remaining_available_Mm3 += nodes[nr_nodes-1]->remaining_available_Mm3;
+    //printf("tot_remaining_available_Mm3 at outlet= %.4f\n", tot_remaining_available_Mm3);
+
+    // We now loop over the Powerstations and calculate the remaining energy and value. 
+    for(size_t n = 0; n < nr_nodes; n++) {
+        if(nodes[n]->nodetype == NodeType::POWERSTATION) { 
+            // Powerstations has zero storage so only upstream water is needed. 
+            tot_remaining_available_MWh += (nodes[n]->local_energy_equivalent * nodes[n]->upstream_remaining_available_Mm3 * 1000000.0 / 1000.0); // MWh
+            for(size_t t = 0; t < gc->stps; t++) {
+                sum_production += nodes[n]->S->Power[t];
+            }
+        }
+    }
+
+    for(size_t n = 0; n < nr_nodes; n++) {
+        for(size_t t = 0; t < gc->stps; t++) {
+            tot_income_Euro += nodes[n]->S->income[t];
+            tot_cost_Euro  += nodes[n]->S->cost[t];
+        }
+    }
+
+    tot_remaining_available_Euro = tot_remaining_available_MWh*restprice;
+    tot_profit_Euro = tot_income_Euro - tot_cost_Euro;
+    valuefunction_Euro = tot_profit_Euro + tot_remaining_available_Euro;
+
+    sum_qmin_cost = 0.0;
+    for(size_t n = 0; n < nr_nodes; n++) {
+        if(nodes[n]->nodetype == NodeType::CHANNEL) { 
+            for(size_t t = 0; t < gc->stps; t++) {
+                sum_qmin_cost += nodes[n]->S->cost[t];
+            }
+        }
+    }
+
+    sum_lrw_cost = 0.0;
+    // We now loop over the RESERVOIRS 
+    for(size_t n = 0; n < nr_nodes; n++) {
+        if(nodes[n]->nodetype == NodeType::RESERVOIR) { 
+            for(size_t t = 0; t < gc->stps; t++) {
+                sum_lrw_cost += nodes[n]->S->cost[t];
+            }
+        }
+    }
+
+    sum_startstopcost = 0.0;
+    sum_max_adjustment_cost = 0.0;
+    for(size_t n = 0; n < nr_nodes; n++) {
+        if(nodes[n]->nodetype == NodeType::POWERSTATION) { 
+            for(size_t t = 0; t < gc->stps; t++) {
+                sum_startstopcost += nodes[n]->S->cost[t] - nodes[n]->S->adjust_cost[t];
+                sum_max_adjustment_cost += nodes[n]->S->adjust_cost[t];
+            }
+        }
+    }
+
+    avg_price = 0.0;
+    for(size_t t = 0; t < gc->stps; t++) {
+        avg_price += nodes[0]->S->price[t];
+    }
+    avg_price = avg_price/double(gc->stps);
+
+    return valuefunction_Euro;
+}
+///////////////////////////////////////////////////////////////////
+int Riversystem::WriteRiverSystemData(double restprice) {
 
     // Here we write out the aggregated Riversystem data
     FILE *fp;
@@ -157,27 +277,19 @@ int Riversystem::WriteRiverSystemData(GlobalConfig *gc, double restprice) {
             int(n), nodes[n]->nodename.c_str(), nodes[n]->nodetype, EnumToString(nodes[n]->nodetype) , nodes[n]->GetEndWater_Mm3() );
     }
   
-    double tot_remaining_available_Mm3  = 0.0;
-    double tot_remaining_available_MWh  = 0.0;
-    double tot_remaining_available_Euro = 0.0;
-    double tot_income_Euro              = 0.0;
-    double tot_cost_Euro                = 0.0;
-    double tot_profit_Euro              = 0.0;
-    double valuefunction_Euro           = 0.0;
-    double sum_production               = 0.0;
+    tot_remaining_available_Mm3  = 0.0;
+    tot_remaining_available_MWh  = 0.0;
+    tot_remaining_available_Euro = 0.0;
+    tot_income_Euro              = 0.0;
+    tot_cost_Euro                = 0.0;
+    tot_profit_Euro              = 0.0;
+    valuefunction_Euro           = 0.0;
+    sum_production               = 0.0;
 
-    // We calculate the aggregated remaining water volumes in whole riversystem.
-    for(size_t n = 0; n < nr_nodes; n++) {
-        if(nodes[n]->ptr_downstream_node != NULL) {
-            nodes[n]->ptr_downstream_node->upstream_remaining_available_Mm3 
-                +=  (nodes[n]->remaining_available_Mm3 + nodes[n]->upstream_remaining_available_Mm3);
-        }
-    }
-
-    for(size_t n = 0; n < nr_nodes; n++) {
-        // Last node only
-        tot_remaining_available_Mm3 = nodes[n]->upstream_remaining_available_Mm3;
-    }
+    // At the most downstream node (OCEAN) the total available water 
+    // is the node available water + upstream available (not included DEAD WATER)
+    tot_remaining_available_Mm3  = nodes[nr_nodes-1]->upstream_remaining_available_Mm3;
+    tot_remaining_available_Mm3 += nodes[nr_nodes-1]->remaining_available_Mm3;
 
     // Note that Powerstation cannot store water (remaining_available_Mm3 = 0.0), 
     // so downstream accumulation of remaining water is OK. 
@@ -208,11 +320,24 @@ int Riversystem::WriteRiverSystemData(GlobalConfig *gc, double restprice) {
     fprintf(fp,"GLOBAL WATERBALANCE\n");
     fprintf(fp,"start_water_Mm3   = %.6f\n", start_water_Mm3 );
     fprintf(fp,"inflow_volume_Mm3 = %.6f\n", inflow_volume_Mm3); 
+    fprintf(fp,"outflow_Mm3       = %.6f\n", outgoing_Mm3);
     fprintf(fp,"end_water_Mm3     = %.6f\n", end_water_Mm3);
-    fprintf(fp,"outgoing_Mm3      = %.6f\n", outgoing_Mm3);
     fprintf(fp,"waterbalance      = %.6f\n", waterbalance);
     fprintf(fp,"Note that there might be dead water below LRW in the system\n");
     fprintf(fp,"-------------------------------------------\n");
+
+
+    if(WATERBALANCE_WARNINGS) {
+        printf("GLOBAL WATERBALANCE\n");
+        printf("start_water_Mm3   = %.6f\n", start_water_Mm3 );
+        printf("inflow_volume_Mm3 = %.6f\n", inflow_volume_Mm3); 
+        printf("outflow_Mm3       = %.6f\n", outgoing_Mm3);
+        printf("end_water_Mm3     = %.6f\n", end_water_Mm3);
+        printf("waterbalance      = %.6f\n", waterbalance);
+        printf("Note that there might be dead water below LRW in the system\n");
+        printf("-------------------------------------------\n");
+    }
+
 
     double sum_qmin_cost = 0.0;
 
@@ -224,8 +349,8 @@ int Riversystem::WriteRiverSystemData(GlobalConfig *gc, double restprice) {
         }
     }
 
-    double sum_lrw_cost = 0.0;
-    // We now loop over the RESERVOIRS 
+    sum_lrw_cost = 0.0;
+    // We now loop over the RESERVOIRS
     for(size_t n = 0; n < nr_nodes; n++) {
         if(nodes[n]->nodetype == NodeType::RESERVOIR) { 
             for(size_t t = 0; t < gc->stps; t++) {
@@ -234,8 +359,8 @@ int Riversystem::WriteRiverSystemData(GlobalConfig *gc, double restprice) {
         }
     }
 
-    double sum_startstopcost = 0.0;
-    double sum_max_adjustment_cost = 0.0;
+    sum_startstopcost = 0.0;
+    sum_max_adjustment_cost = 0.0;
     for(size_t n = 0; n < nr_nodes; n++) {
         if(nodes[n]->nodetype == NodeType::POWERSTATION) { 
             for(size_t t = 0; t < gc->stps; t++) {
@@ -245,7 +370,7 @@ int Riversystem::WriteRiverSystemData(GlobalConfig *gc, double restprice) {
         }
     }
 
-    double avg_price = 0.0;
+    avg_price = 0.0;
     for(size_t t = 0; t < gc->stps; t++) {
         avg_price += nodes[0]->S->price[t];
     }
@@ -268,6 +393,27 @@ int Riversystem::WriteRiverSystemData(GlobalConfig *gc, double restprice) {
     fprintf(fp, "valuefunction_Euro           = %.3f\n", valuefunction_Euro);
 
     fclose(fp);
+
+    if(ECONOMY_WARNINGS) {
+        printf("Average_price_Euro           = %.3f\n", avg_price);
+        printf("RestPrice_Euro               = %.3f\n", restprice);
+        printf("tot_remaining_available_Mm3  = %.3f\n", tot_remaining_available_Mm3);
+        printf("tot_remaining_available_MWh  = %.3f\n", tot_remaining_available_MWh);
+        printf("tot_remaining_available_Euro = %.3f\n", tot_remaining_available_Euro);
+        printf("Sum_Production_MWh           = %.3f\n", sum_production);
+        printf("tot_income_Euro              = %.3f\n", tot_income_Euro);
+        printf("Avg_achieved_price_E_MWh     = %.3f\n", tot_income_Euro/sum_production );
+        printf("sum_qmin_cost_Euro           = %.3f\n", sum_qmin_cost);
+        printf("sum_lrw_cost_Euro            = %.3f\n", sum_lrw_cost);
+        printf("sum_startstopcost_Euro       = %.3f\n", sum_startstopcost);
+        printf("sum_max_adjustment_cost      = %.3f\n", sum_max_adjustment_cost);
+        printf("tot_cost_Euro                = %.3f\n", tot_cost_Euro);
+        printf("tot_profit_Euro              = %.3f\n", tot_profit_Euro);
+        printf("valuefunction_Euro           = %.3f\n", valuefunction_Euro);
+        printf("-----------------------------------\n");
+    }
+
+
     return 0;
 }
 ///////////////////////////////////////////////////////////////////

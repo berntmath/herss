@@ -45,6 +45,16 @@ int Channel::initArrayCurves(void) {
     return 0;
 }
 
+//----------------------------------------------------------------------
+void Channel::PrintChannelWater(void){
+    printf ("NODE CHANNEL %d %s\n", int(idnr) , nodename.c_str() );
+    for(size_t t = 0; t <  this->traveltime; t++ ) {  
+        printf("waterflow_m3[%lu] = %.5f\n", t, waterflow_m3[t]);
+    }
+}
+//----------------------------------------------------------------------
+
+
 int Channel::Simulate(size_t t) {
 
     double sum_storage_m3;
@@ -232,8 +242,22 @@ int Channel::ReadNodeData(string filename) {
     return 0;
 }
 ////////////////////////////////////////////////////////////////////////////
-int Channel::ReadStateFile(string filename){
+int Channel::SetStartState(void) {
 
+    for(size_t t = 0; t < S->stps; t++ ) {
+        S->up_inflow[t]    = 0.0;
+        //S->inflow[t]       = 0.0;
+    }
+
+    for(size_t t = 0; t <  this->traveltime; t++ ) {
+        waterflow_m3[t]    = init_waterflow_m3[t];
+    }
+
+    return 0;
+}
+////////////////////////////////////////////////////////////////////////////
+
+int Channel::ReadStateFile(string filename){
     bool found_node = false;
 	ifstream myfile;
 	string line;
@@ -308,6 +332,18 @@ int Channel::CheckWaterBalance(void) {
 
     double waterbalance = (start_channel_m3/1000000) + sum_inflow - (end_channel_m3/1000000) - sum_outflow;
 
+    if(WATERBALANCE_WARNINGS) {
+        printf( "WATERBALANCE CHANNEL for idnr=%d   nodename=%s\n", int(idnr) , nodename.c_str()  );
+        printf("start_channel_Mm3 = %.6f\n", start_channel_m3/1000000);
+        printf("sum_inflow_Mm3    = %.6f\n", sum_inflow);
+        printf("sum_outflow_Mm3   = %.6f\n", sum_outflow);
+        printf("end_channel_Mm3   = %.6f\n", end_channel_m3/1000000);
+        printf("waterbalance      = %.6f\n", waterbalance);
+        //printf( "idnr=%d   nodename=%s\n", int(idnr), nodename.c_str()  );
+        //printf("file: %s  linenr: %d  function: %s \n", __FILE__ , __LINE__, __FUNCTION__);
+        // this->PrintChannelWater();
+    }
+
     if(abs(waterbalance) > 0.0001) {
         printf( "WATERBALANCE CHANNEL for idnr=%d   nodename=%s\n", int(idnr) , nodename.c_str()  );
         printf("start_channel_Mm3 = %.6f\n", start_channel_m3/1000000);
@@ -356,10 +392,8 @@ int Channel::WriteNodeOutput(GlobalConfig *gc){
     fprintf(fp, "%s", outstr);
     fprintf(fp, "TRAVELTIME= %d\n", int( this->traveltime)  );
     fprintf(fp, "DECAY= %.3f\n", this->decay);
-
     fprintf(fp, "yyyy mm dd hh [m3/s]    [Mm3]       [m3/s]      [Euro]\n");
     fprintf(fp, "yyyy mm dd hh Up_Inflow Storage_Mm3 tot_outflow Qmin_Cost\n");
-
     for(size_t t = 0; t < this->stps; t++) {
         fprintf(fp, "%d %d %d %d ", S->year[t], S->month[t], S->day[t], S->hour[t]);
         fprintf(fp, "%.4f %.8f ", S->up_inflow[t], S->channel_storage_Mm3[t]);
@@ -381,7 +415,7 @@ double Channel::GetTunnelFLow(size_t t) {
 }
 //////////////////////////////////////////////////////////////////////////////////
 int Channel::WriteStateFile(FILE *fp) {
-    fprintf (fp, "NODE CHANNEL %d %s\n", int(idnr) , nodename.c_str() );
+    fprintf (fp, "NODE CHANNEL %d %s ", int(idnr) , nodename.c_str() );
     for( size_t s = 0; s < this->traveltime; s++) { 
         fprintf(fp, "%.5f ", this->waterflow_m3[s]);
     }
