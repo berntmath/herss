@@ -65,4 +65,3 @@ double Node::GetEndWater_Mm3(void)                  { return 0; }
 int Node::WriteNodeOutput(GlobalConfig *gc )        { return 0; }
 double Node::GetTunnelFLow(size_t t)                { return 0; }
 int Node::WriteStateFile(FILE *fp)                  { return 0; }
-

@@ -61,6 +61,14 @@ GlobalConfig::GlobalConfig(){
     this->nr_pstations       = NOT_INIT;
     this->nr_reservoirs      = NOT_INIT;
     this->nr_channels        = NOT_INIT;
+
+    for(size_t n = 0; n < MAX_NR_NODES; n++) {
+        actions_idnrs[n] = NOT_INIT;
+        inflows_idnrs[n] = NOT_INIT;
+    } 
+    this->n_action_nodes = NOT_INIT;  // Will make crash if not reset proparly, this is intentionaly   :)
+    this->n_inflow_nodes = NOT_INIT;  // Will make crash if not reset proparly  :)
+
 }
 ///////////////////////////////////////////////////////////////////////////////////////////////////////
 GlobalConfig::~GlobalConfig(){}
@@ -73,14 +81,11 @@ void GlobalConfig::checkNrSteps() {
     Line line_obj;
     this->stps      = 0;
 
-    char infilename [100];
-    sprintf (infilename, "%s%s", this->inputdir.c_str() , this->pricefile.c_str() );
-
-    myfile.open(infilename);
+    myfile.open(this->pricefile);
 	if (myfile.is_open()) 	{
         // Do nothing
 	} else {
-		cout << "The file " << infilename << " could not be found/opened. \n";
+		cout << "The file " << this->pricefile << " could not be found/opened. \n";
         printf("file: %s  linenr: %d  function: %s \n", __FILE__ , __LINE__, __FUNCTION__ );
 		exit(EXIT_FAILURE);
 	}
@@ -91,7 +96,7 @@ void GlobalConfig::checkNrSteps() {
         value   = line_obj.extractNextElementFromLine(&line);
         if (!keyword.compare("RESTPRICE") == 0) {
 		    cout << "There is an error in the pricefile " << this->pricefile << " please revisit input\n";
-            printf("file: %s  linenr: %d\n", __FILE__ , __LINE__);
+            printf("file: %s  linenr: %d  function: %s \n", __FILE__ , __LINE__, __FUNCTION__ );
 		    exit(EXIT_FAILURE);
         }
     }
@@ -102,7 +107,7 @@ void GlobalConfig::checkNrSteps() {
         value   = line_obj.extractNextElementFromLine(&line);
         if (!keyword.compare("Date") == 0) {
 		    cout << "There is an error in the pricefile " << this->pricefile << " please revisit input\n";
-            printf("file: %s  linenr: %d\n", __FILE__ , __LINE__);
+            printf("file: %s  linenr: %d  function: %s \n", __FILE__ , __LINE__, __FUNCTION__ );
 		    exit(EXIT_FAILURE);
         }
     }
@@ -115,7 +120,18 @@ void GlobalConfig::checkNrSteps() {
     myfile.close();
 }
 ///////////////////////////////////////////////////////////////////////////////////////////////////////
-void GlobalConfig::diagnoseTopologyFile() { 
+void GlobalConfig::SetDirectoriesAndFilenames() {
+
+    topologyfile    = inputdir + topologyfile;
+    pricefile       = inputdir + pricefile;
+    inflowfile      = inputdir + inflowfile;
+    actionsfile     = inputdir + actionsfile;
+    start_statefile = inputdir + start_statefile;
+    out_statefile   = outputdir + out_statefile;
+    outputfile      = outputdir + outputfile;
+}
+///////////////////////////////////////////////////////////////////////////////////////////////////////
+void GlobalConfig::Diagnose() { 
 	ifstream myfile;
 	string line;
     string keyword;
@@ -133,7 +149,7 @@ void GlobalConfig::diagnoseTopologyFile() {
         // Do nothing
 	} else {
 		cout << "Topologyfile " << this->topologyfile << " could not be found/opened. \n";
-        printf("file: %s  linenr: %d\n", __FILE__ , __LINE__);
+        printf("file: %s  linenr: %d  function: %s \n", __FILE__ , __LINE__, __FUNCTION__ );
 		exit(EXIT_FAILURE);
 	}
 
@@ -143,9 +159,7 @@ void GlobalConfig::diagnoseTopologyFile() {
             // Line is not empty and doesn't start with # (hash/pound sign)
             keyword = line_obj.extractNextElementFromLine(&line);
             value   = line_obj.extractNextElementFromLine(&line);
-
             if (keyword.compare("NODE") == 0) {
-                
                 if (value.compare("RESERVOIR") == 0) {
                     this->nr_reservoirs++;
                     nodetypes[this->nr_nodes] = NodeType::RESERVOIR;
@@ -163,6 +177,65 @@ void GlobalConfig::diagnoseTopologyFile() {
         }
     }
     myfile.close();
+
+
+    // Get information about node actions and idnrs 
+	myfile.open(this->actionsfile.c_str() );
+	if (myfile.is_open()) 	{
+        // Do nothing
+	} else {
+		cout << "Actionsfile " << this->actionsfile << " could not be found/opened. \n";
+        printf("file: %s  linenr: %d  function: %s \n", __FILE__ , __LINE__, __FUNCTION__ );
+		exit(EXIT_FAILURE);
+	}
+
+    getline(myfile, line);  // Read first line
+    keyword = line_obj.extractNextElementFromLine(&line);
+
+    if (!keyword.compare("Date_NodeID") == 0) {
+		cout << "There is an error in the actionsfile file " << this->actionsfile << " please revisit input\n";
+        printf("file: %s  linenr: %d  function: %s \n", __FILE__ , __LINE__, __FUNCTION__ );
+		exit(EXIT_FAILURE);
+    }
+    
+    string tmpline = line;
+    this->n_action_nodes = line_obj.calcNrCols(&tmpline);
+    // Now we read in the idnrs for each coloumn and save it. 
+    for(size_t c = 0; c < this->n_action_nodes; c++) {
+        value = line_obj.extractNextElementFromLine(&line);
+        actions_idnrs[c] = stoi(value);
+    }
+    myfile.close();
+
+    // Read header of inflow file and get idnrs. 
+	myfile.open(this->inflowfile.c_str() );
+	if (myfile.is_open()) 	{
+        // Do nothing
+	} else {
+		cout << "Inflowfile:  " << this->inflowfile << " could not be found/opened. \n";
+        printf("file: %s  linenr: %d  function: %s \n", __FILE__ , __LINE__, __FUNCTION__ );        
+		exit(EXIT_FAILURE);
+	}
+
+    getline(myfile, line);  // Read first line
+    keyword = line_obj.extractNextElementFromLine(&line);
+
+    if (!keyword.compare("Date_NodeID") == 0) {
+		cout << "There is an error in the inflowfile file " << this->inflowfile << " please revisit input\n";
+        printf("file: %s  linenr: %d  function: %s \n", __FILE__ , __LINE__, __FUNCTION__ );
+		exit(EXIT_FAILURE);
+    }
+    
+    tmpline = line;
+    this->n_inflow_nodes = line_obj.calcNrCols(&tmpline);
+    // Now we read in the idnrs for each coloumn and save it. 
+    for(size_t c = 0; c < this->n_inflow_nodes; c++) {
+        value = line_obj.extractNextElementFromLine(&line);
+        inflows_idnrs[c] = stoi(value);
+    }
+    myfile.close();
+
+
 }
 ///////////////////////////////////////////////////////////////////////////////////////////////////////
 void GlobalConfig::readGlobalFile() {
@@ -177,7 +250,7 @@ void GlobalConfig::readGlobalFile() {
         // Do nothing
 	} else {
 		cout << "The file " << globalfile << " could not be found/opened. \n";
-        printf("file: %s  linenr: %d\n", __FILE__ , __LINE__);
+        printf("file: %s  linenr: %d  function: %s \n", __FILE__ , __LINE__, __FUNCTION__ );
 		exit(EXIT_FAILURE);
 	}
 
@@ -298,6 +371,7 @@ void GlobalConfig::readGlobalFile() {
 }
 ///////////////////////////////////////////////////////////////////////////
 void GlobalConfig::printGlobalInfo() {
+    printf("###########################################################\n");
     printf("ACTIONFILE          %s\n", this->actionsfile.c_str() );
     printf("INFLOWFILE          %s\n", this->inflowfile.c_str() );
     printf("PRICEFILE           %s\n", this->pricefile.c_str() );
@@ -314,5 +388,24 @@ void GlobalConfig::printGlobalInfo() {
     printf("STPS                %d\n", int(this->stps));
     printf("WRITE_NODEFILES     %d\n", this->write_nodefiles ); 
     printf("OUTPUTDIR           %s\n", this->outputdir.c_str() );
+
+    printf("n_action_nodes = %lu  [ ", n_action_nodes);
+
+    if(n_action_nodes != NOT_INIT) {
+        for(size_t n = 0; n < n_action_nodes; n++) {
+            printf("%lu ", actions_idnrs[n]);
+        }
+        printf("]\n");
+    } 
+
+    printf("n_inflow_nodes = %lu  [ ", n_inflow_nodes);
+    if(n_inflow_nodes) {
+        for(size_t n = 0; n < n_inflow_nodes; n++) {
+            printf("%lu ", inflows_idnrs[n]);
+        }
+        printf("]\n");
+    }
+    printf("###########################################################\n");
+
 }
 ///////////////////////////////////////////////////////////////////////////////

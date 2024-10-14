@@ -50,44 +50,38 @@ int main(int argc, char *argv[]) {
 
     gc->globalfile     = string(argv[1]);
     gc->readGlobalFile();
-    gc->diagnoseTopologyFile();
-    gc->checkNrSteps();
+    gc->SetDirectoriesAndFilenames();
+    gc->Diagnose();
+    gc->checkNrSteps();  // This can be voided if you want to set stps manually before allocation of objects
     gc->printGlobalInfo();
 
     Dataset *data;
-    data = new Dataset(gc->stps, gc->nr_nodes);
-
-    char infilename [100];
-    sprintf (infilename, "%s%s", gc->inputdir.c_str() , gc->pricefile.c_str() );
-    data->readPricefile(infilename);
-
-    sprintf (infilename, "%s%s", gc->inputdir.c_str() , gc->inflowfile.c_str() );
-    data->readInflowFile(infilename);
-
-    sprintf (infilename, "%s%s", gc->inputdir.c_str() , gc->actionsfile.c_str() );
-    data->readActionsFile(infilename);
+    data = new Dataset(gc);
 
     Herss *herss;
     herss = new Herss(gc);
-    herss->prepaireSimulation(gc, data);
-    herss->Simulate(gc);
-    herss->CheckWaterBalance(gc);
-    herss->GlobalWaterBalance(gc, data );
-    herss->CalcAdjustmenCosts(gc);
-
+    herss->prepaireSimulation(data);
+    herss->Simulate();
+    herss->CheckWaterBalance();
+    herss->GlobalWaterBalance(data);
+    herss->CalcAdjustmenCosts();
+    printf("ValueFunction = %.5f\n", herss->rs->CalcVF(data->restprice));
+    
     // Now we need to write output to files
-    herss->rs->WriteRiverSystemData(gc, data->restprice);
-    herss->rs->WriteReservoirData(gc);
-    herss->WriteStateFile(gc);
+    herss->rs->WriteRiverSystemData(data->restprice);
+    herss->rs->WriteReservoirData();
+    herss->WriteStateFile();
 
     if(gc->write_nodefiles) {
-        herss->WriteNodeOutput(gc);
+        herss->WriteNodeOutput();
     }  
 
-    printf("THE-END\n");
 
     delete herss;
     delete data;
     delete gc;
+
+    printf("THE-END\n");
+
     return 0;
 }

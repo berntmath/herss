@@ -44,11 +44,11 @@ SOFTWARE.
 using namespace std;
 
 // Version number.
-#define VERSION 002
-#define VERSION_DATE 20240404
+#define VERSION 005
+#define VERSION_DATE 20241014
 
 // Maximum number of nodes allowed. // to save coding
-#define MAX_NR_NODES 20
+#define MAX_NR_NODES 30
 // Maximum number of coloumns (words or tokens) in one line
 #define MAX_WORDS 200
 
@@ -67,10 +67,19 @@ using namespace std;
 const string DELIMITER = " \n\t";
 const string NUMERIC = "0123456789.-";
 
-#define NOT_INIT -9999
+#define NOT_INIT 99999
 #define STR_NOT_INIT "ERROR_STR_NOT_INIT"
+
 #define HERSS_DEBUG_ALL 1
+
 #define MAX_NUMBER_OF_QMIN_PERIODS 5
+
+// Turn on and off warnings related to check of waterbalance. 
+#define WATERBALANCE_WARNINGS false
+
+// Turn on and off warnings related to check of economy in the system
+#define ECONOMY_WARNINGS false
+
 
 /////////////////////////////////////////////////////////////////
 #define MACRO_m3s_2_Mm3(q, dt) q*dt/1000000.0
@@ -112,6 +121,7 @@ inline const char* EnumToString(NodeType v)
 class Scenario;
 class GlobalConfig;
 class Channel;
+class SystemState;
 //-----------------------------------------------------------------------
 
 // Simple time class
@@ -200,18 +210,26 @@ public:
     double discount_rate;  // DISCOUNT_RATE 0.05
     double discount_factor;
 
+    size_t actions_idnrs[MAX_NR_NODES];  // We save the idnrs pointing to nodes with actions (actions inputfile). 
+    size_t n_action_nodes;  // Number of nodes were we need to set actions. Could be at PSTATION or RESERVOIRS (hatch_release) 
+    size_t inflows_idnrs[MAX_NR_NODES];  // We save the idnrs pointing to nodes with inflows 
+    size_t n_inflow_nodes;  // Number of nodes were we need to set the inflow (RESERVOIRS) 
+
+    void DiagnoseActionFile(); // We read the header and find number of action nodes and their indexes. 
     void readGlobalFile();              // Reads the global file
+    void SetDirectoriesAndFilenames();
     void printGlobalInfo();
-    void diagnoseTopologyFile();
+    void Diagnose();
     void checkNrSteps();  // Checks number of timesteps in the pricefile
 };
 ///////////////////////////////////////////////////////////////////////////////////////////
 class Dataset {
 public:
-    Dataset(size_t stps, size_t nr_nodes);
+    Dataset(GlobalConfig *gconfig);
     ~Dataset();    
     size_t stps;               // Number of timesteps used.
     size_t nr_nodes;           // We allocate one inflow and action series pr node. Not used in all of them , but makes it easyer.  
+    GlobalConfig *gc; 
 
     double *price;          // We assume all nodes located in same price area. So we need only one price series. 
     double restprice;
@@ -226,9 +244,9 @@ public:
     string str_startdate;                            // Startdate of data
     string str_enddate;                              // End date of data
 
-    void readPricefile(string pricefile);
-    void readInflowFile(string inflowfile);
-    void readActionsFile(string actionsfile);
+    void readPricefile();
+    void readInflowFile();
+    void readActionsFile();
 
 };
 ///////////////////////////////////////////////////////////////////////////////////////////
@@ -336,6 +354,8 @@ class Node {
     double up_res_Mm3;   // Upstream reservoir volume - used in Powerstation. 
     double remaining_available_Mm3;
     double upstream_remaining_available_Mm3; // We accumulate as we go downward. 
+
+    size_t reservoir_idnr;  // Used so we can go from node idnr to reservoir number. 
 
     int pstation_idnr; // We use this to index pstations. 
     int max_adjustment_pr_day;
@@ -493,6 +513,9 @@ class Channel: public Node {
     int WriteNodeOutput(GlobalConfig *gc);  // Write output for each node 
     double GetTunnelFLow(size_t t);
     int WriteStateFile(FILE *fp);
+    int SetStartState(void);
+    void PrintChannelWater(void);
+
 };
 /////////////////////////////////////////////////////////////////////////////////////////
 // This class models a hydropower system
@@ -502,6 +525,7 @@ public:
     Riversystem();                   // Default constructor
     Riversystem(GlobalConfig *gc);
     ~Riversystem();                  // Default destructor
+    GlobalConfig *gc;
     size_t nr_nodes;
     size_t nr_reservoirs;
     size_t nr_pstations;
@@ -515,17 +539,36 @@ public:
     double sum_prod_MWh;
     double sum_total_MWh; // Production pluss remaining in whole riversystem
     double adjust_cost;   // Adjustment cost 
+    
+    double tot_remaining_available_Mm3;
+    double tot_remaining_available_MWh;
+    double tot_remaining_available_Euro;
+    double tot_income_Euro;
+    double tot_cost_Euro;
+    double tot_profit_Euro;
+    double valuefunction_Euro;
+    double sum_production;
+    double avg_price;
+    double sum_startstopcost;
+    double sum_max_adjustment_cost;
+    double sum_lrw_cost;
+    double sum_qmin_cost;
+
 
     // Array of Nodes (reservoirs, powerstations, channels)
-    // WORK IN PROGRESS: Consider to use double pointers, it could be easyer to loop over individualy (reservoirs, powerstations and channels)
     Node **nodes;
     Reservoir *reservoirs;
     Powerstation *pstations;
     Channel *channels;
-    double Simulate(GlobalConfig *gc, int id);
-    int WriteRiverSystemData(GlobalConfig *gc, double restprice);
-    void WriteReservoirData(GlobalConfig *gc);
-    int WriteSelectedOutputMatrix(GlobalConfig *gc);
+    double Simulate(int id);
+    double CalcVF(double restprice);
+    double CalcSimulationProfit();
+    int WriteRiverSystemData(double restprice);
+    void WriteReservoirData();
+    void PrintReservoirData2Screen();
+    int WriteSelectedOutputMatrix();
+    double GetEndingReservoirLevel(size_t r_idnr);
+    
 };
 /////////////////////////////////////////////////////////////////
 // A class that models Input, Scenarios and riversystem
@@ -533,21 +576,47 @@ class Herss {
 public:
     Herss();
     Herss(GlobalConfig *gc);
+    GlobalConfig *gc;
     ~Herss();
     size_t dt;          // Delta time step in seconds
     size_t stps;        // How many time steps used in each scenario, and in the optimization step.
     size_t nr_nodes;    
     Riversystem *rs;
     Scenario  **scen;
-    int prepaireSimulation(GlobalConfig *gc, Dataset *data); // Read in final data and set pointers. 
-    int Simulate(GlobalConfig *gc);
-    int CheckWaterBalance(GlobalConfig *gc);
-    int GlobalWaterBalance(GlobalConfig *gc, Dataset *data);
-    int WriteNodeOutput(GlobalConfig *gc);  // Write output for each node
-    int WriteStateFile(GlobalConfig *gc);  // Write output for each node
-    int CalcAdjustmenCosts(GlobalConfig *gc);
 
+    int prepaireSimulation(Dataset *data); // Read in final data and set pointers.
+    int Simulate();
+    int CheckWaterBalance();
+    int GlobalWaterBalance(Dataset *data);
+    int WriteNodeOutput();  // Write output for each node
+    int WriteStateFile();  // Write output for each node
+    int CalcAdjustmenCosts();
+    
+    void SetAction(size_t node_idnr, size_t t, double value);
+    double GetAction(size_t node_idnr, size_t t);
+
+    void PrintActions();
+    void PrintReservoirLevels_fr();
+    void PrintRemainingChannelWater_Mm3();
+    double GetRestPrice();
+    double GetPrice(size_t t);
+    void SetPrice(size_t t, double price, double restprice);
+    double GetReservoir_Init_fr(size_t idnr);  // Get starting reservoir fraction.
+
+    void SetReservoir_Init_fr(size_t idnr, double value);  // Set starting reservoir fraction.
+
+
+    double GetReservoirLevel_fr(size_t node_idnr, size_t t);
+    void PrintInflowSeries(size_t t);
+    void PrintState();
+
+    void SetInflowInNode(size_t t, size_t nodenr, double value);
+    double GetInflowInNode(size_t t, size_t nodenr);
+    void PrintAllInput();
 };
 /////////////////////////////////////////////////////////////////
+
+
+
 
 #endif

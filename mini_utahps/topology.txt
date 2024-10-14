@@ -1,0 +1,78 @@
+##########################################################################
+# TOPOLOGY FILE Upper Tovdalen Hydro Power System (uTAHPS)
+# BVM 1 Mar, 2024
+# 
+# qmin[m3/s]  start_data[dd.mm] end_data[dd.mm] QMIN_COST[Euro]
+# QMIN 0.1 01.10 15.06 4.0
+##########################################################################
+
+##########################################################################
+# KROKNESVATN RESERVOIR
+# NODE NODETYPE(RESERVOIR/PSTATION/CHANNEL) IDNR NAME
+NODE RESERVOIR 0 KROKNESVATN
+HRW 440.00
+LRW 333.00
+RES_PENALTY 300
+# Reservoir curve, points, [masl, Mm3] Curve must go below hatch_masl.
+RESERVOIR_CURVE 19
+300.00	0.0
+333.00	19.30
+343.00	31.08
+353.00	44.75
+363.00	60.14
+373.00	77.21
+383.00	96.01
+393.00	116.70
+403.00	139.28
+413.00	163.78
+423.00	190.23
+433.00	218.57
+435.00  280.0
+438.00	350.0
+440.00  370.0
+441.00	390.0
+442.00	400.0
+445.00	500.0
+450.00	2000.0
+# Overflow curve, points, downstream idnr   [masl, m3s]
+OVERFLOW_CURVE 4 1
+440.0	0.0
+441.0	10.0
+445.0	300.0
+449.0	2000.0
+# Outlet hatch downstream_nodeid, qmin_hatch, qmax_hatch, hatch_masl
+OUTLET_HATCH -9999
+OUTLET_TUNNEL 1
+OUTLET_AUTO_QMIN -9999
+ENDNODE
+#########################################################################################
+
+#########################################################################################
+# AUSTENA POWERSTATION KROKNESVATN IS INTAKE
+NODE PSTATION 1 EASTER
+DOWNLINK_IDNR -9
+# Turbine efficiency curve [M3s, %]
+TURBINE_CURVE 11
+0.00	0.00
+2.45	50.00
+4.21	80.00
+5.59	90.00
+6.86	93.00
+7.84	93.00
+8.53	93.00
+9.02	92.00
+9.31	91.00
+9.80	90.00
+9.81	89.00
+STATIC_GENERATOR_EFFICIENCY 0.96
+HEADLOSSCOEF 0.145
+POWSTAT_MASL 218.0
+POWSTAT_MIN_DISCHARGE 0.0
+POWSTAT_MAX_DISCHARGE 9.8
+POWSTAT_STARTSTOP 2.0
+LOCAL_ENERGY_EQUIVALENT 0.11
+AUTO_QMIN -9999
+MAX_ADJUST -9999
+ENDNODE
+#########################################################################################
+

@@ -106,7 +106,12 @@ int Powerstation::Simulate(size_t t) {
         startstopCost = this->powstat_startstop/2.0;
     }
 
-    this->ptr_downstream_node->S->up_inflow[t] += Q;
+
+    // We do allow for a powerstation to be the most downstream node in the riversystem. 
+    if(this->ptr_downstream_node != NULL) {
+        this->ptr_downstream_node->S->up_inflow[t] += Q;
+    }
+
     // Save timeseries 
     S->income[t]           = income;
     S->cost[t]             = startstopCost;
@@ -116,6 +121,7 @@ int Powerstation::Simulate(size_t t) {
     S->Power[t]            = Power;
     S->tot_outflow[t]      = Q;
     remaining_available_Mm3 = 0.0;  // The powerstation can never store water.
+
     return 0;
 }
 ////////////////////////////////////////////////////////////////
@@ -337,6 +343,8 @@ int Powerstation::ReadStateFile(string filename){
     myfile.close();
     if(!found_node) {
 		cout << "There is something wrong in the statefile "<< filename << "\n";
+        cout << "This could have been caused by indexing of your nodes." << "\n";
+        cout << "Start with zero at the top, and work your way down, to the outlet." << "\n";
         printf( "Powerstation::ReadStateFile           idnr=%d  nodename=%s\n", int(idnr) , nodename.c_str()  );
         printf("file: %s  linenr: %d  function: %s \n", __FILE__ , __LINE__, __FUNCTION__);
 		exit(EXIT_FAILURE);
@@ -348,13 +356,21 @@ int Powerstation::CheckWaterBalance(void) {
 
     double sum_inflow  = 0.0;
     double sum_outflow = 0.0;
-
     for(size_t t = 0; t < this->stps; t++) {
         sum_inflow += MACRO_m3s_2_Mm3( (this->S->inflow[t] + this->S->up_inflow[t]) , dt);
         sum_outflow += MACRO_m3s_2_Mm3(this->S->tot_outflow[t], dt);
     }
 
     double waterbalance = sum_inflow - sum_outflow;
+
+    if(WATERBALANCE_WARNINGS) {
+        printf( "WATERBALANCE POWERSTATION idnr=%d   nodename=%s\n", int(idnr), nodename.c_str()  );
+        printf("sum_inflow_Mm3    = %.6f\n", sum_inflow);
+        printf("sum_outflow_Mm3   = %.6f\n", sum_outflow);
+        printf("waterbalance      = %.6f\n", waterbalance);
+        //printf("file: %s  linenr: %d  function: %s \n", __FILE__ , __LINE__, __FUNCTION__);
+        printf("-------------------------------------------\n");
+    }
 
     if(abs(waterbalance) > 0.0001) {
         printf( "WATERBALANCE POWERSTATION idnr=%d  nodename=%s\n", int(idnr), nodename.c_str()  );
@@ -370,7 +386,7 @@ int Powerstation::CheckWaterBalance(void) {
             MACRO_m3s_2_Mm3(this->S->up_inflow[t], dt ),
             MACRO_m3s_2_Mm3(this->S->tot_outflow[t], dt), S->action[t] ,
             sum_inflow, sum_outflow , sum_inflow - sum_outflow );
-    }
+        }
 
         printf( "WATERBALANCE POWERSTATION idnr=%d   nodename=%s\n", int(idnr), nodename.c_str()  );
         printf("sum_inflow    = %.6f\n", sum_inflow);

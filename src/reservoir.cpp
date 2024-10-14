@@ -139,6 +139,10 @@ double Reservoir::CalcOverflow() {
 ////////////////////////////////////////////////////////////////
 void Reservoir::InitReservoir(void) {
 
+    for(size_t t = 0; t < S->stps; t++ ) {
+        S->up_inflow[t]    = 0.0;
+    }
+
     if(this->nr_points_res_curve < 2) {
         printf("Reservoir curve not initialized\n");
         printf("file: %s  linenr: %d\n", __FILE__ , __LINE__);
@@ -178,10 +182,8 @@ int Reservoir::Simulate(size_t t) {
     double overflow_Mm3;
     double outlet_auto_qmin_flow_Mm3;
     double total_inflow_Mm3;
-
     double max_hatchflow;
     double current_filling;
-    
     current_filling = -999.0; // To void warning
 
     #ifdef HERSS_DEBUG_ALL
@@ -223,6 +225,14 @@ int Reservoir::Simulate(size_t t) {
 
     tunnelflow_Mm3 = 0.0;
     if(outlet_tunnel_in_use) {
+        if(ptr_downstream_node_tunnel    == NULL) {
+            printf("ERROR IN RESERVOIR:  Something is wrong with the pointer:  ptr_downstream_node_tunnel \n");
+            printf("idnr=%d  nodename=%s   timestep=%lu \n", int(idnr) , nodename.c_str() , t );
+            printf("file: %s  linenr: %d  function: %s \n", __FILE__ , __LINE__, __FUNCTION__);
+            printf("res_masl     = %.5f\n", this->res_masl);
+            exit(EXIT_FAILURE);
+        }
+
         ptr_downstream_node_tunnel->start_of_stp_masl = this->res_masl;
         ptr_downstream_node_tunnel->up_res_Mm3 = this->res_Mm3;
         double tunnelf_m3s = ptr_downstream_node_tunnel->GetTunnelFLow(t);
@@ -255,7 +265,6 @@ int Reservoir::Simulate(size_t t) {
     // Update the reservoir masl
     this->res_masl = ac_res_Mm3_2_masl.x2y(this->res_Mm3);
 
-    
     // AUTO HATCH 
     outlet_auto_qmin_flow_Mm3 = 0.0;
     // Here we simulate the effect of an automatic water release set by the operators.
@@ -280,19 +289,18 @@ int Reservoir::Simulate(size_t t) {
     cost_lrw = 0.0;
     if( this->res_masl  < this->res_LRW) {
         cost_lrw = this->res_penalty*dt/3600;
-        printf( "LRW COST  :  idnr=%d  nodename=%s\n", int(idnr) , nodename.c_str()  );
-        printf( "res_masl = %.3f     res_LRW= %.3f\n", this->res_masl , this->res_LRW);
-        printf("file: %s  linenr: %d  function: %s \n", __FILE__ , __LINE__, __FUNCTION__);
     }
 
     if(outlet_tunnel_in_use) {
         ptr_downstream_node_tunnel->end_of_stp_masl = this->res_masl;
     }
 
+
     // Fractional_filling
     double fract_filling = (res_Mm3  - filling_at_lrw_Mm3) / (filling_at_hrw_Mm3 - filling_at_lrw_Mm3);
 
     remaining_available_Mm3 = res_Mm3  - filling_at_lrw_Mm3;
+
     if(remaining_available_Mm3 < 0.0) {
         remaining_available_Mm3 = 0.0; // Used to calculate remaining available energy in system. Cannot be negative.
     }
@@ -308,6 +316,9 @@ int Reservoir::Simulate(size_t t) {
         printf("fract_filling       = %.5f\n", fract_filling);
         exit(EXIT_FAILURE);
     }
+
+
+    this->res_fr = fract_filling;
 
     // Transfer timeseries 
     S->tot_inflow[t]   = MACRO_Mm3_2_m3s(total_inflow_Mm3,dt);
@@ -616,9 +627,21 @@ int Reservoir::CheckWaterBalance(void) {
     double end_res_Mm3 = this->res_Mm3;
     double waterbalance = start_res_Mm3 + sum_inflow - end_res_Mm3 - sum_outflow;
 
-    if(abs(waterbalance) > 0.0001) {
+
+    if(WATERBALANCE_WARNINGS) {
+        printf( "WATERBALANCE RESERVOIR idnr=%d  nodename=%s\n", int(idnr), nodename.c_str()  );
+        printf("start_res_Mm3     = %.6f\n", start_res_Mm3);
+        printf("sum_inflow_Mm3    = %.6f\n", sum_inflow);
+        printf("sum_outflow_Mm3   = %.6f\n", sum_outflow);
+        printf("end_res_Mm3       = %.6f\n", end_res_Mm3);
+        printf("waterbalance      = %.6f\n", waterbalance);
         printf( "---------------------------\n" );
-        printf( "WATERBALANCE for idnr=%d  nodename=%s\n", int(idnr), nodename.c_str()  );
+    }
+
+
+    if(abs(waterbalance) > 0.0001) {
+        printf( "------ERROR ERROR ERROR --------------\n" );
+        printf( "WATERBALANCE RESERVOIR idnr=%d  nodename=%s\n", int(idnr), nodename.c_str()  );
         printf("start_res_Mm3 = %.6f\n", start_res_Mm3);
         printf("sum_inflow    = %.6f\n", sum_inflow);
         printf("sum_outflow   = %.6f\n", sum_outflow);
@@ -642,7 +665,7 @@ double Reservoir::GetStartWater_Mm3(void) {
 //------------------------------------------------------------------------
 double Reservoir::GetEndWater_Mm3(void) {
     // Ending water volume
-    return this->res_Mm3;
+    return this->res_Mm3;  // This is the water in the reservoir at the end of the last timestep
 }
 //------------------------------------------------------------------------
 int Reservoir::WriteNodeOutput(GlobalConfig *gc){

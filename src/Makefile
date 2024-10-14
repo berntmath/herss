@@ -29,9 +29,9 @@
 CC   = g++
 OBJ  =  main.o node.o globalconfig.o line.o reservoir.o dataset.o qmin.o \
 		powerstation.o channel.o riversystem.o scenario.o herss.o arraycurve.o
-LINKOBJ = ${OBJ}
 INCS =  -I.
-BIN  = ../herss.exe
+BIN  = herss.exe
+LIB = herss.so
 
 # Memory check with Valgrind
 # valgrind --leak-check=full --show-leak-kinds=all ../herss.exe global_utahps_hourly.txt
@@ -40,19 +40,24 @@ BIN  = ../herss.exe
 # CFLAGS = $(INCS) -Wall -O3
 
 # Compile for testing and debugging. 
-CFLAGS = $(INCS) -Wall -pg -pedantic 
+CFLAGS = $(INCS) -Wall -g -pedantic -fPIC
 
 
 RM = rm -f
 .PHONY: all all-before all-after clean clean-custom
-all: all-before ${BIN} all-after
+all: all-before ${BIN} ${LIB} all-after
 clean:
-	${RM} ${OBJ} *.core *.stackdump *~ *.exe
+	${RM} ${OBJ} *.core *.so *.stackdump *~ *.exe
 all-clean: clean
 	${RM} ${BIN}
 
+# This makes herss.exe
 $(BIN): $(OBJ)
-	$(CC) $(LINKOBJ) -o ${BIN}  $(LIBS) ${CFLAGS}
+	$(CC) $(OBJ) -o ${BIN} ${CFLAGS}
+
+# This makes herss.so
+$(LIB): $(OBJ)
+	$(CC) -shared -o ${LIB} ${OBJ}
 
 main.o: main.cpp herss.h
 	$(CC) $(CFLAGS) -c main.cpp -o main.o
