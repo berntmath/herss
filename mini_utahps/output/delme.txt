@@ -1,0 +1,2 @@
+Empty file.
+So GitHub will download the folder correctly. 
