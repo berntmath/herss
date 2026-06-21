@@ -449,6 +449,22 @@ TEST_F(PowerstationTest, Svoletjonn_OptimalEfficiency_MaxPowerPerFlow)
     EXPECT_GT(powerstation->S->Power[0], 0.6); // Should be efficient power production
 }
 
+TEST(PowerstationEfficiencyTest, UniformNormalizedCurve_MaxDischargeUsesLastPoint)
+{
+    Powerstation powerstation;
+    powerstation.idnr = 1;
+    powerstation.nodename = "TEST";
+    powerstation.generators.resize(1);
+    powerstation.generators[0].max_discharge = 4.0;
+    powerstation.generators[0].use_uniform_normalized_curve = true;
+    for (size_t i = 0; i < N_UNIFORM_EFF_CURVE_POINTS; ++i) {
+        powerstation.generators[0].uniform_normalized_curve[i] = 10.0 * i;
+    }
+
+    EXPECT_NEAR(powerstation.calcEfficiency(0, 2.0), 0.50, 1e-12);
+    EXPECT_NEAR(powerstation.calcEfficiency(0, 4.0), 1.00, 1e-12);
+}
+
 // Head Loss and Hydraulic Tests
 TEST_F(PowerstationTest, Simulate_SharedPenstock_CombinedHeadloss)
 {

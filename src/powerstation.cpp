@@ -67,6 +67,11 @@ void Powerstation::ValidatePowerstationSettings() {
 ////////////////////////////////////////////////////////////////
 double Powerstation::calcEfficiency(size_t gen_idx, double q_m3s) {  // Calculate the efficiency for a specific generator and discharge.
 
+    if (gen_idx >= generators.size()) {
+        LOG_ERR("ERROR: Generator index out of bounds in powerstation " + std::to_string(int(idnr)) + " (" + nodename + ")");
+        return 0.0;
+    }
+
     if(q_m3s < 0.0) {
         LOG_WARN("ERROR: Discharge is negative for generator " + std::to_string(gen_idx) + " in powerstation " + std::to_string(int(idnr)) + " (" + nodename + "): Q = " + std::to_string(q_m3s));
         LOG_ERR("Check your action file, and make sure the discharge for generator " + std::to_string(gen_idx) + " in powerstation " + std::to_string(int(idnr)) + " (" + nodename + ") is not negative");
@@ -77,27 +82,31 @@ double Powerstation::calcEfficiency(size_t gen_idx, double q_m3s) {  // Calculat
         LOG_ERR("Check your action file, and make sure the discharge for generator " + std::to_string(gen_idx) + " in powerstation " + std::to_string(int(idnr)) + " (" + nodename + ") is not above the maximum discharge of the generator");
     }
 
-    if(gen_idx < 0) {
-        LOG_ERR("ERROR: Generator index is negative in powerstation " + std::to_string(int(idnr)) + " (" + nodename + "): gen_idx = " + std::to_string(gen_idx));
-    }
-
     if(q_m3s < 0.000001) {
         return 0.0;
     }
 
     if(generators[gen_idx].use_uniform_normalized_curve) {
+        if(generators[gen_idx].max_discharge <= 0.0) {
+            LOG_ERR("ERROR: Max discharge must be positive for uniform normalized curve in powerstation " + std::to_string(int(idnr)) + " (" + nodename + ")");
+            return 0.0;
+        }
+
         // We use the fast lookup method for uniform curves. 
         double Qn = q_m3s / generators[gen_idx].max_discharge;    // normalize to 0-1
-        int i = (int)(Qn * (N_UNIFORM_EFF_CURVE_POINTS-1));  // direct index calculation
-        double t = Qn * (N_UNIFORM_EFF_CURVE_POINTS-1) - i;  // fractional part for interpolation
+        if(Qn <= 0.0) {
+            return generators[gen_idx].uniform_normalized_curve[0] / 100.0;
+        }
+        if(Qn >= 1.0) {
+            return generators[gen_idx].uniform_normalized_curve[N_UNIFORM_EFF_CURVE_POINTS-1] / 100.0;
+        }
+
+        double scaled = Qn * (N_UNIFORM_EFF_CURVE_POINTS-1);
+        size_t i = static_cast<size_t>(scaled);  // direct index calculation
+        double t = scaled - i;  // fractional part for interpolation
         double eta = generators[gen_idx].uniform_normalized_curve[i] + t * (generators[gen_idx].uniform_normalized_curve[i+1] - generators[gen_idx].uniform_normalized_curve[i]);
         // cout << "Uniform normalized curve: gen_idx = " << gen_idx << ", Q = " << q_m3s << ", Qn = " << Qn << ", i = " << i << ", t = " << t << ", eta = " << eta << "\n";
         return eta / 100.0;
-    }
-
-    if (gen_idx >= generators.size()) {
-        LOG_ERR("ERROR: Generator index out of bounds in powerstation " + std::to_string(int(idnr)) + " (" + nodename + ")");
-        return 0.0;
     }
 
     // Default is to use old code with array curves. 
