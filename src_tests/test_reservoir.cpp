@@ -143,3 +143,125 @@ TEST_F(ReservoirTest, Simulate_OverflowOnly_RoutesDownstreamAndUpdatesState) {
     EXPECT_GE(res.S->res_masl[0], res.res_LRW - 1e-9);
     EXPECT_LE(res.S->res_masl[0], res.res_HRW + 1e-9);
 }
+
+// Helper: activate reservoir curve + overflow curve mode and initialize arrays.
+// The fixture does not set use_reservoir_curve=true, so tests that need curve
+// interpolation must call this first.
+static void activateCurveMode(Reservoir& res) {
+    res.use_reservoir_curve = true;
+    res.use_overflow_curve  = true;
+    res.fast_overflow       = 1;
+    res.initArrayCurves();
+    res.filling_at_lrw_Mm3 = res.ac_res_masl_2_Mm3.x2y(res.res_LRW);
+    res.filling_at_hrw_Mm3 = res.ac_res_masl_2_Mm3.x2y(res.res_HRW);
+}
+
+// ---- OUTLET_AUTO_QMIN tests -------------------------------------------------
+
+TEST_F(ReservoirTest, OutletAutoQmin_FullRelease_WhenWaterAboveOutletMasl) {
+    // Curve: 100->0, 110->10, 120->25 Mm3. Outlet at masl 110 = 10 Mm3.
+    activateCurveMode(res);
+
+    res.outlet_auto_qmin_in_use = true;
+    res.outlet_auto_qmin_masl   = 110.0;
+
+    auto* ds_qmin = new Channel();
+    ds_qmin->S    = new Scenario(4, 3600, 0);
+    res.ptr_downstream_node_auto_qmin = ds_qmin;
+
+    // Single all-year period: 2.0 m3/s
+    res.qmin.nr_periods                   = 1;
+    res.qmin.timeperiods[0].start_day     = 1;  res.qmin.timeperiods[0].start_month = 1;
+    res.qmin.timeperiods[0].end_day       = 31; res.qmin.timeperiods[0].end_month   = 12;
+    res.qmin.timeperiods[0].min_discharge = 2.0;
+    res.qmin.timeperiods[0].penalty_cost  = 0.0;
+
+    // Reservoir at 20 Mm3 (above outlet 10 Mm3); available = 10 Mm3 >> required
+    res.res_Mm3  = 20.0;
+    res.res_masl = res.ac_res_Mm3_2_masl.x2y(20.0);
+
+    res.S->inflow[0] = 0.0; res.S->up_inflow[0] = 0.0;
+    res.S->year[0] = 2000; res.S->month[0] = 6; res.S->day[0] = 15;
+    res.S->dt = 3600; res.S->price[0] = 30.0;
+
+    ASSERT_EQ(res.Simulate(0), 0);
+
+    // Required 2.0 m3/s = 0.0072 Mm3; fully met
+    EXPECT_NEAR(res.S->auto_qmin_m3s[0], 2.0, 1e-4);
+    EXPECT_NEAR(ds_qmin->S->up_inflow[0], 2.0, 1e-4);
+
+    delete ds_qmin->S;
+    delete ds_qmin;
+}
+
+TEST_F(ReservoirTest, OutletAutoQmin_ZeroRelease_WhenWaterBelowOutletMasl) {
+    // Curve: 100->0, 110->10, 120->25 Mm3. Outlet at masl 110 = 10 Mm3.
+    activateCurveMode(res);
+
+    res.outlet_auto_qmin_in_use = true;
+    res.outlet_auto_qmin_masl   = 110.0;
+
+    auto* ds_qmin = new Channel();
+    ds_qmin->S    = new Scenario(4, 3600, 0);
+    res.ptr_downstream_node_auto_qmin = ds_qmin;
+
+    res.qmin.nr_periods                   = 1;
+    res.qmin.timeperiods[0].start_day     = 1;  res.qmin.timeperiods[0].start_month = 1;
+    res.qmin.timeperiods[0].end_day       = 31; res.qmin.timeperiods[0].end_month   = 12;
+    res.qmin.timeperiods[0].min_discharge = 2.0;
+    res.qmin.timeperiods[0].penalty_cost  = 0.0;
+
+    // Reservoir at 5 Mm3, below outlet (10 Mm3); available = max(0, 5-10) = 0
+    res.res_Mm3  = 5.0;
+    res.res_masl = res.ac_res_Mm3_2_masl.x2y(5.0);  // ~105 masl
+
+    res.S->inflow[0] = 0.0; res.S->up_inflow[0] = 0.0;
+    res.S->year[0] = 2000; res.S->month[0] = 6; res.S->day[0] = 15;
+    res.S->dt = 3600; res.S->price[0] = 30.0;
+
+    ASSERT_EQ(res.Simulate(0), 0);
+
+    // No water above outlet MASL: zero release
+    EXPECT_NEAR(res.S->auto_qmin_m3s[0], 0.0, 1e-9);
+    EXPECT_NEAR(ds_qmin->S->up_inflow[0], 0.0, 1e-9);
+
+    delete ds_qmin->S;
+    delete ds_qmin;
+}
+
+TEST_F(ReservoirTest, OutletAutoQmin_PartialRelease_WhenWaterJustAboveOutletMasl) {
+    // Curve: 100->0, 110->10, 120->25 Mm3. Outlet at masl 110 = 10 Mm3.
+    activateCurveMode(res);
+
+    res.outlet_auto_qmin_in_use = true;
+    res.outlet_auto_qmin_masl   = 110.0;
+
+    auto* ds_qmin = new Channel();
+    ds_qmin->S    = new Scenario(4, 3600, 0);
+    res.ptr_downstream_node_auto_qmin = ds_qmin;
+
+    // Large requirement (100 m3/s = 0.36 Mm3/h); only 0.001 Mm3 available
+    res.qmin.nr_periods                   = 1;
+    res.qmin.timeperiods[0].start_day     = 1;  res.qmin.timeperiods[0].start_month = 1;
+    res.qmin.timeperiods[0].end_day       = 31; res.qmin.timeperiods[0].end_month   = 12;
+    res.qmin.timeperiods[0].min_discharge = 100.0;
+    res.qmin.timeperiods[0].penalty_cost  = 0.0;
+
+    // Reservoir just above outlet: 10.001 Mm3; available = 0.001 Mm3
+    res.res_Mm3  = 10.001;
+    res.res_masl = res.ac_res_Mm3_2_masl.x2y(10.001);
+
+    res.S->inflow[0] = 0.0; res.S->up_inflow[0] = 0.0;
+    res.S->year[0] = 2000; res.S->month[0] = 6; res.S->day[0] = 15;
+    res.S->dt = 3600; res.S->price[0] = 30.0;
+
+    ASSERT_EQ(res.Simulate(0), 0);
+
+    // Expected release: 0.001 Mm3 * 1e6 / 3600 ≈ 0.2778 m3/s (< 100 m3/s required)
+    double expected_m3s = 0.001 * 1e6 / 3600.0;
+    EXPECT_NEAR(res.S->auto_qmin_m3s[0], expected_m3s, 1e-3);
+    EXPECT_LT(res.S->auto_qmin_m3s[0], 100.0);
+
+    delete ds_qmin->S;
+    delete ds_qmin;
+}

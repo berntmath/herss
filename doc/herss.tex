@@ -409,9 +409,9 @@
 	\section{Node Topology and ordering}
 	The order in which nodes are defined in the topology file determines the order in which they are simulated at each time step. Water is routed from the most upstream node towards the most downstream node in sequence. It is therefore important that the topology file correctly reflects the physical layout and connectivity of the river system. 
 	
-	The topology file defines the river system as a directed acyclic graph (DAG) of nodes, where each node represents either a reservoir, a power station, or a channel reach. Each node is assigned a unique integer identifier (\texttt{IDNR}), starting at zero. The calculation order in HERSS is determined entirely by the node numbering: at each time step, nodes are simulated in ascending order of their \texttt{IDNR}, from node~$0$ to node~$N-1$, where $N$ is the total number of nodes.
+	The topology file defines the river system as a directed acyclic graph (DAG) of nodes, where each node represents either a reservoir, a power station, a channel reach, or a pump (Section~\ref{subsec:pump}). Each node is assigned a unique integer identifier (\texttt{IDNR}), starting at zero. The calculation order in HERSS is determined entirely by the node numbering: at each time step, nodes are simulated in ascending order of their \texttt{IDNR}, from node~$0$ to node~$N-1$, where $N$ is the total number of nodes.
 	
-	This sequential ordering imposes a strict requirement on how nodes are numbered in the topology file: \textbf{all upstream nodes must be assigned lower identifiers than the downstream nodes they drain into}. In other words, water can only flow from a node with a lower \texttt{IDNR} to a node with a higher \texttt{IDNR}. When a node is simulated at time step~$t$, it reads the upstream inflow (\texttt{up\_inflow}) that has already been written by all upstream nodes in the same time step. It then computes its own outflow and adds it to the \texttt{up\_inflow} accumulator of its downstream node, which has not yet been simulated in that time step.
+	This sequential ordering imposes a strict requirement on how nodes are numbered in the topology file: \textbf{all upstream nodes must be assigned lower identifiers than the downstream nodes they drain into, with only one exception for pumped hydro}. In other words, water can only flow from a node with a lower \texttt{IDNR} to a node with a higher \texttt{IDNR}. When a node is simulated at time step~$t$, it reads the upstream inflow (\texttt{up\_inflow}) that has already been written by all upstream nodes in the same time step. It then computes its own outflow and adds it to the \texttt{up\_inflow} accumulator of its downstream node, which has not yet been simulated in that time step.
 	
 	A concrete consequence is illustrated below. Consider a cascaded system with three nodes:
 	
@@ -426,6 +426,8 @@
 	
 	If a node receives water from multiple upstream sources (e.g.\ a confluence/junction), all contributing upstream nodes must have lower identifiers than the receiving node. Branching topologies, such as a reservoir with both a tunnel outlet and an overflow outlet leading to different downstream nodes, are supported, but all downstream nodes must again have higher identifiers than the source node.
 	
+	A \texttt{PUMP} node, representing a Pumped Storage Hydropower (PSH) facility (Section~\ref{subsec:pump}) is the one exception to the sequential ordering rule: since it moves water against the normal flow direction, both \texttt{PUMP\_SOURCE\_IDNR} and \texttt{PUMP\_TARGET\_IDNR} must be \emph{higher} than the pump's own \texttt{IDNR}.
+	
 	\subsection*{Numbering Guidelines}
 	
 	The following guidelines should be followed when constructing a topology file:
@@ -434,6 +436,7 @@
 		\item Start numbering at zero (\texttt{IDNR = 0}) for the most upstream node in the system.
 		\item Assign identifiers in strictly increasing order in the downstream direction.
 		\item At confluences, ensure that \emph{all} contributing nodes have identifiers lower than the receiving node.
+        \item When placing a \texttt{PUMP} node, plan it ahead so it is given a lower \texttt{IDNR} than both its source and target reservoirs.
 		\item The last node in the topology (highest \texttt{IDNR}) is typically the most downstream node, for example the ocean or a boundary channel with no downstream connection (indicated by a downstream identifier of \texttt{-9} in the topology file).
 	\end{enumerate}
 	
@@ -443,12 +446,13 @@
 	\section{Node Types}
 	\label{sec:nodetypes}
 
-	HERSS currently supports three node types:
+	HERSS currently supports four node types:
 
 	\begin{itemize}
 		\item \textbf{Reservoir}: a storage node representing a regulated lake or impoundment. The reservoir receives inflow, stores water, and releases it through one or more outlets to downstream nodes.
-		\item \textbf{Power station}: a run-of-river node representing a hydropower generating unit. The power station receives water from upstream, converts a fraction of the flow into electricity, and passes the remaining water downstream.
+		\item \textbf{Power station}: a node representing a hydropower plant. The power station receives water from an upstream reservoir, generates electricity from the turbine discharge, and passes the discharged water downstream.
 		\item \textbf{Channel}: a routing node representing a river reach or transport element. The channel receives water from upstream and routes it downstream with delay and attenuation.
+        \item \textbf{Pump}: a node representing a pumped-storage hydropower (PSH) facility, using electricity to move water from a source reservoir to a target reservoir.
 	\end{itemize}
 
 	Each node type is described in detail in the following subsections.
@@ -487,7 +491,17 @@
 	to enforce regulatory minimum-flow requirements directly from the reservoir, for
 	example a fixed environmental flow obligation. Up to five seasonal periods may be
 	defined, each with its own minimum discharge.
-	
+
+    When \texttt{OUTLET\_AUTO\_QMIN} is used, HERSS expect the following arguments:
+    \begin{verbatim}
+    OUTLET_AUTO_QMIN <nr_periods> <downstream_idnr> <outlet_masl>
+    <start date DD.MM> <end date DD.MM> <Qmin m3/s>
+    ...
+    \end{verbatim}
+    where \texttt{nr\_periods} is the integer describing the number of defined periods listed
+    below (Maximum number of 5). Set \texttt{nr\_periods} to a non-positive value (e.g.\
+    \texttt{-9999}) to disable \texttt{OUTLET\_AUTO\_QMIN} entirely. At most one of the defined periods may
+    cross the turn of the year (e.g.\ \texttt{01.10 31.03}). HERSS will return warnings for days in the year which is not covered in the defined periods.  Overlapping periods will be ignored, and only the overlapping period with the first start date will be used. The minimum-flow release hatch is placed at \texttt{outlet\_masl}, and water below this level will not be available for release.
 	
 	\item[Overflow (\texttt{OVERFLOW\_CURVE})] Uncontrolled spillage over the dam crest,
 	described by a piecewise-linear curve mapping reservoir elevation to overflow discharge
@@ -724,23 +738,28 @@
 
 	Head losses in the penstock are modelled using a quadratic loss formula:
 
-	$$
-	\Delta H = k \cdot Q^2
-	$$
+	\begin{equation}
+	    \Delta H = k \cdot Q^2
+        \label{eq:Headloss}
+	\end{equation}
+	
 
 	where $k$ is the head loss coefficient (\texttt{HEADLOSSCOEF}) and $Q$ is the discharge
 	[m$^3$/s]. The net head is then:
 
 
-	$$
-	H_\mathrm{netto} = H_\mathrm{brutto} - \Delta H
-	$$
+	\begin{equation}
+	    H_\mathrm{netto} = H_\mathrm{brutto} - \Delta H
+        \label{eq:Head_net}
+	\end{equation}
 
 	Mechanical power output for each generator is:
 
-	$$
-	P = \eta_\mathrm{turbine}(Q) \cdot \eta_\mathrm{generator} \cdot \rho g \cdot H_\mathrm{netto} \cdot Q \quad \text{[MW]}
-	$$
+	\begin{equation}
+	    P = \eta_\mathrm{turbine}(Q) \cdot \eta_\mathrm{generator} \cdot \rho g \cdot H_\mathrm{netto} \cdot Q \quad \text{[MW]}
+        \label{eq:Gen_Mech_power}
+	\end{equation}
+	
 
 	where $\eta_\mathrm{turbine}(Q)$ is the turbine efficiency at the current discharge, read from
 	the turbine efficiency curve, and $\eta_\mathrm{generator}$ is the static generator efficiency.
@@ -832,7 +851,24 @@
 		\item Discharges above \texttt{GENERATOR\_MAX\_DISCHARGE} are treated as an error; the simulation will abort with a diagnostic message.
 	\end{itemize}
 	
-	
+
+    \subsubsection{Headloss in the tunnel}
+    The \texttt{HEADLOSSCOEF} k in eq. (\ref{eq:Headloss}) which is used to estimate head loss eq. (\ref{eq:Head_net}) and eq. (\ref{eq:Gen_Mech_power}) is derived from the Darcy Weisbach equation: 
+
+    \begin{equation}
+        h_f=f_d \cdot \frac{LV^2}{2gD}
+        \label{Darcy_Weisbach}
+    \end{equation}
+    where $f_d$ is the dimensionless Darcy friction factor, $L$ is the tunnel length, $V$ is the speed of water, $g$ is the gravitational acceleration and $D$ is the tunnel diameter. 
+
+    Substituting $V=\frac{Q}{A}$ into eq. (\ref{Darcy_Weisbach}) and comparing the resulting expression with eq. (\ref{eq:Headloss}) yields the tunnel head loss coefficient
+
+    \begin{equation}
+        k = \frac{f_d L}{2 g D A^2},
+        \label{eq:HEADLOSSCOEF}
+    \end{equation}
+
+    depending on the Darcy friction factor, tunnel length, and the tunnel diameter and cross-sectional area. The Darcy friction factor may be found in tables for different surface roughnesses.
 
 	\subsubsection{Penstock Configuration}
 
@@ -856,6 +892,14 @@
 	greater than zero), a warning is issued. This is currently implemented as a soft constraint:
 	the simulation continues but flags the violation in the log. The minimum discharge is used
 	primarily to indicate a technically meaningful lower operating limit for the turbines.
+
+    \subsubsection{Local Energy Equivalent (\texttt{LOCAL\_ENERGY\_EQUIVALENT})}
+    The \texttt{LOCAL\_ENERGY\_EQUIVALENT} [kWh/m$^3$] is a power station specific factor used
+    to convert the water volume stored above LRW in the reservoirs upstream of it into an estimate of the remaining producible energy. It is a static coefficient and should be estimated using
+    representative values for the head and efficiency of each power station and its reservoir.
+    
+    The energy equivalent is used together with \texttt{RESTPRICE} in the input pricefile to
+    estimate the value of the water remaining in the river system at the end of the simulation.
 
 	\subsubsection{Automatic Minimum Flow (\texttt{AUTO\_QMIN})}
 
@@ -900,7 +944,7 @@
 
 	The \texttt{CHANNEL} node models the transport of water through a river reach between two
 	nodes. It introduces a travel time delay and attenuation of the flood wave, representing the
-	physical processes of translation and dispersion in a natural watercourse. Like the power
+	physical processes of translation and dispersion in a natural watercourse. Unlike the power
 	station, the channel produces no electricity and carries no economic value on the water
 	stored within it.
 
@@ -1010,6 +1054,9 @@
 		\item \textbf{Rule of thumb}: for steep rivers ($S_0 \sim 0.005$--$0.02$)
 		travel times are typically in the range of 0.1--2 hours per km of reach.
 		For flatter lowland rivers the travel time may be several times longer.
+
+        \item \textbf{Manning's roughness coefficient}: n is typically in the range of 0.025-0.1 for natural streams (\cite{JobsonFroelich88}), where the lower values represent large rivers with little restrictions and rough sections, and the larger numbers represent smaller streams with more rough patches and large boulders.  
+            
 	\end{itemize}
 	
 	The number of cascaded linear reservoirs \texttt{N\_CASCADE\_LINRES} controls
@@ -1020,10 +1067,18 @@
 	\subsubsection{Minimum Flow (\texttt{QMIN})}
 
 	A minimum flow requirement can be defined for a channel node using \texttt{QMIN}. If the
-	routed outflow falls below the specified minimum in any time step, a penalty cost is incurred.
+	routed outflow falls below the specified minimum in any time step, a penalty cost is incurred, no additional actions is executed.
 	Up to five seasonal periods with different minimum flow requirements can be defined.
 
-	\textit{Note: the QMIN feature for channels is currently under development and is not yet available for use.}
+    If \texttt{QMIN} is used downstream of a reservoir enforcing the \texttt{OUTLET\_AUTO\_QMIN}, note that the number of cascaded linear reservoirs \texttt{N\_CASCADE\_LINRES}, the time resolution $\Delta t$ in the simulation, and the \texttt{K\_TRAVELTIME\_HOURS} all affect the outflow from this (\texttt{CHANNEL}) node. As the outflow exhibits asymptotic behaviour and for a finite time never approaches the inflow value, a tolerance of $1 \times 10^{-3}$ [m$^3$/s] is used to accept the \texttt{QMIN} requirement.
+
+    When \texttt{QMIN} is used, HERSS expect the following arguments:
+    \begin{verbatim}
+	QMIN <nr_periods>
+    <start date DD.MM> <end date DD.MM> <Qmin m3/s> <penalty Euro>
+	...
+	\end{verbatim}
+    where \texttt{nr\_periods} is the integer describing the number of defined periods listed below (Maximum number of 5). The same date verification procedure is used as for \texttt{OUTLET\_AUTO\_QMIN}.
 
 	\subsubsection{State File}
 
@@ -1037,6 +1092,83 @@
 	One storage value is written per cascaded reservoir, in Mm$^3$. These values are read back
 	at the start of the next simulation run as initial conditions for the routing model, enabling correct continuity across chained simulations.
 
+
+
+
+    \newpage
+	\subsection{Pump}\label{subsec:pump}
+	The \texttt{PUMP} node models a PSH facility, which is mutch like a power staion node but in reverse. It lifts water from a source \texttt{RESERVOIR} to a target \texttt{RESERVOIR} while consuming electricity. Its source and target reservoirs are given via \texttt{PUMP\_SOURCE\_IDNR} and \texttt{PUMP\_TARGET\_IDNR} rather than the usual downstream connection. Only one pump unit per node is supported, unlike power stations, where multiple generators are supported. Water below \texttt{PUMP\_INLET\_MASL} in the source reservoir cannot be withdrawn.
+    \begin{figure}[h!]
+        \centering
+        \includegraphics[width=1\linewidth]{figures/PUMP.png}
+        \caption{Node type \texttt{PUMP}. Illustration of the connection of the pump between its source and target reservoirs.}
+        \label{fig:pump}
+    \end{figure}
+
+    In the simulation of each time step, while the movement of water flow from the most upstream node to the most downstream node (\texttt{IDNR} 0 to \texttt{IDNR} $(N-1)$), the pump moves water from its source to the target reservoir when the simulation reaches the pumps \texttt{IDNR}. When all movement of water is simulated within each time step, the power and cost of electricity are calculated based on average head between target and source reservoirs, before the next time step is simulated.
+    
+	\subsubsection{Hydraulic Head and Power Calculation}
+
+	The gross hydraulic head is computed as the average value between the target and source reservoirs within a time step, here as target minus source:
+
+	\begin{equation}
+		H_\mathrm{brutto} = \left(\frac{h_\mathrm{start}^\mathrm{tgt} + h_\mathrm{end}^\mathrm{tgt}}{2}\right) - \left(\frac{h_\mathrm{start}^\mathrm{src} + h_\mathrm{end}^\mathrm{src}}{2}\right)
+        \label{eq:Pump_head}
+	\end{equation}
+
+    where $h$ are the reservoir water surface elevations denoted $_{start}$ and $_{end}$ for the beginning and end of a time step respectively, and $^{tgt}$ and $^{src}$ for target and source reservoir, respectively.
+    
+	Head losses are added to the head the pump must overcome, unlike Eq.~\ref{eq:Head_net} for power stations. This is done using the same quadratic formula as for poser stations and give net head as: 
+
+	\begin{equation}
+		H_\mathrm{netto} = H_\mathrm{brutto} + k \cdot Q^2
+	\end{equation}
+    where $k$ is the head loss coefficient (\texttt{HEADLOSSCOEF}) for the pump and $Q$ is the pumped water $\mathrm{[m^3/s]}$.
+
+	Electrical power drawn from the grid is:
+
+	\begin{equation}
+		P = \frac{\rho g \cdot H_\mathrm{netto} \cdot Q}{\eta_\mathrm{pump}(Q) \cdot \eta_\mathrm{motor}} \quad \text{[MW]}
+	\end{equation}
+
+	where $\eta_\mathrm{pump}(Q)$ is read from a \texttt{PUMP\_CURVE}/\texttt{UNIFORM\_NORMALIZED\_CURVE} (same format as the turbine efficiency curve, Section~\ref{subsec:powerstation}) and $\eta_\mathrm{motor}$ is \texttt{STATIC\_MOTOR\_EFFICIENCY}.
+
+	\subsubsection{Topology File Syntax}
+
+	\begin{verbatim}
+    NODE PUMP <idnr> <nodename>
+    PUMP_SOURCE_IDNR <idnr>
+    PUMP_TARGET_IDNR <idnr>
+    PUMP_INLET_MASL <masl>
+    MAX_DISCHARGE <m3/s>
+    HEADLOSSCOEF <k>
+    STATIC_MOTOR_EFFICIENCY <0-1>
+    PUMP_STARTSTOP <value>
+    UNIFORM_NORMALIZED_CURVE 11
+    0.0     <0-100>
+    ...
+    1.0     <0-100>
+    ENDNODE
+	\end{verbatim}
+
+    \subsubsection{Start and Stop Costs}
+    A start/stop cost (\texttt{PUMP\_STARTSTOP}) [EUR] is incurred each time the pump
+    transitions between the off state ($a = 0$) and the on state ($a > 0$), or vice versa,
+    exactly as for a power station (Section~\ref{subsec:powerstation}). The cost is split
+    equally between the start event and the stop event, so each transition contributes
+    $\texttt{PUMP\_STARTSTOP} / 2$ to the total cost.
+
+	\subsubsection{Numbering Requirement}
+	Both \texttt{PUMP\_SOURCE\_IDNR} and \texttt{PUMP\_TARGET\_IDNR} must be higher than the pump's own \texttt{IDNR} since the pumped water is moved before either reservoir each time step.
+
+    \begin{figure}[h!]
+        \centering
+        \includegraphics[width=1\linewidth]{figures/PUMP_System.png}
+        \caption{Schematic of the \texttt{Mini\_pump\_test} system, and how the nodes are connected in the topology. \texttt{IDNR} 0 is the pump, and \texttt{IDNR} 3 is the power station. This illustrates how a pump can move water without following the normal rule of water flow from a node with a lower to a higher \texttt{IDNR}, but may move water between tow nodes with \texttt{IDNR} higher than itself.}
+        \label{fig:Pump_system}
+    \end{figure}
+
+    \newpage
 	\section{Input}
 	This section describes in more detail the input files required to run HERSS. To some extent it is a repetition of what was said in earlier chapters. Feel free to skip it or have quick look \smiley{}. An efficient way to learn about the input files and their format is to just open the testdata and use it as a starting point in your own project. 
 	
@@ -1094,7 +1226,7 @@
 	ENDNODE
 	\end{verbatim}
 
-	where \texttt{NODETYPE} is one of \texttt{RESERVOIR}, \texttt{PSTATION}, or
+	where \texttt{NODETYPE} is one of \texttt{RESERVOIR}, \texttt{PSTATION}, \texttt{PUMP}, or
 	\texttt{CHANNEL}, \texttt{IDNR} is the unique integer node identifier, and \texttt{NAME}
 	is a descriptive label used in output files and log messages.
 
@@ -1114,6 +1246,7 @@
 	\item \texttt{CHANNEL}: the downstream node \texttt{IDNR} is given on the
 	\texttt{NODE} line itself. A value of \texttt{-9} indicates no downstream
 	connection, i.e.\ the system outlet.
+    \item \texttt{PUMP}: This node only specifies which nodes water is moved between with two nodes of higher \texttt{IDNR} than itself by specifying \texttt{PUMP\_SOURCE\_IDNR} and \texttt{PUMP\_TARGET\_IDNR}.
 	\end{itemize}
 
 
@@ -1230,6 +1363,8 @@
 	\item \textbf{Reservoir hatches} (\texttt{OUTLET\_HATCH}): the action controls the
 	gate opening, scaling the discharge linearly between the defined minimum and
 	maximum hatch flows.
+    \item \textbf{Pumps}: the action sets the discharge through the
+	pump as a fraction of the pumps maximum discharge (\texttt{MAX\_DISCHARGE}).
 	\end{itemize}
 
 	\subsubsection{File Format}
@@ -1309,7 +1444,7 @@
 		NODE  <NODETYPE>  <IDNR>  <NAME>  <value(s)>
 	\end{verbatim}
 	
-	The three node types each have their own format:
+	Different node types each have their own format:
 	
 	\begin{description}
 		\item[\texttt{NODE RESERVOIR \textnormal{\textit{idnr name fr}}}]
@@ -1335,6 +1470,10 @@
 		\texttt{N\_CASCADE\_LINRES} as defined for this node in the topology file.
 		These values initialise the routing model so that the channel carries the correct
 		amount of in-transit water from the start.
+
+        \item[\texttt{NODE PUMP \textnormal{\textit{idnr name P}}}] The PHS facility's initial condition is the energy consumed [MWh] at the last time step
+		of the previous run, written as a positive value. This value is used to evaluate start/stop cost transitions
+		at the first time step of the new simulation. A value of \texttt{0.0} means the pump was off at the end of the previous period.  
 	\end{description}
 	
 	\subsubsection{Example}

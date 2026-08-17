@@ -15,7 +15,7 @@ CC   = g++
 
 OBJ  =  main.o node.o globalconfig.o line.o reservoir.o dataset.o qmin.o \
 		powerstation.o channel.o riversystem.o scenario.o herss.o arraycurve.o \
-		xtime.o topoparser.o logger.o cascadedreservoirs.o
+		xtime.o topoparser.o logger.o cascadedreservoirs.o pump.o
 INCS =  -I.
 BIN  = herss.exe
 LIB = herss.so
@@ -153,4 +153,7 @@ logger.o: logger.cpp herss.h
 
 cascadedreservoirs.o: cascadedreservoirs.cpp herss.h logger.h
 	$(CC) $(CFLAGS) -c cascadedreservoirs.cpp -o cascadedreservoirs.o
+
+pump.o: pump.cpp herss.h logger.h
+	$(CC) $(CFLAGS) -c pump.cpp -o pump.o
 

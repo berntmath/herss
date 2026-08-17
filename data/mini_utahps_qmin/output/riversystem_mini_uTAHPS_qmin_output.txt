@@ -1,0 +1,31 @@
+Riversystem mini_uTAHPS_qmin
+Node Idnr Nodename          Nodetype int Nodetypename Remaining_Mm3
+Node  0 HJELLE               Nodetype 0  RESERVOIR             9.4060 
+Node  1 SVOLETJONN           Nodetype 1  PSTATION              0.0000 
+Node  2 VANAROSEN            Nodetype 2  CHANNEL               0.0173 
+-------------------------------------------
+GLOBAL WATERBALANCE
+start_water_Mm3   = 9.060810
+inflow_volume_Mm3 = 0.558576
+outflow_Mm3       = 0.196080
+end_water_Mm3     = 9.423306
+waterbalance      = -0.000000
+Note that there might be dead water below LRW in the system
+-------------------------------------------
+Average_price_Euro           = 31.739
+RestPrice_Euro               = 33.000
+tot_remaining_Mm3            = 9.423
+tot_active_remaining_Mm3     = 6.398
+tot_remaining_MWh            = 703.756
+tot_remaining_Euro           = 23223.953
+Sum_Production_MWh           = 0.000
+tot_income_Euro              = 0.000
+Avg_achieved_price_E_MWh     = 33.000
+sum_qmin_cost_Euro           = 75.000
+sum_lrw_cost_Euro            = 0.000
+sum_startstopcost_Euro       = 0.000
+sum_max_adjustment_cost      = 0.000
+sum_aggressive_actions_cost  = 0.000
+tot_cost_Euro                = 75.000
+tot_profit_Euro              = -75.000
+valuefunction_Euro           = 23148.953

@@ -1,5 +1,7 @@
 #include <gtest/gtest.h>
 #include "herss.h"
+#include <cstdio>
+#include <fstream>
 #include <string>
 
 // Test fixture for tests that might need a GlobalConfig object
@@ -96,6 +98,22 @@ TEST_F(GlobalConfigTest, DiagnoseTopologyFileThrowsOnMissingFile)
 {
     gc->topologyfile = "nonexistent_topology.txt";
     EXPECT_EXIT(gc->DiagnoseTopologyFile(), ::testing::ExitedWithCode(EXIT_FAILURE), ".*");
+}
+
+TEST_F(GlobalConfigTest, DiagnoseTopologyFileRejectsTooManyNodes)
+{
+    const std::string topologyfile = "/tmp/herss_too_many_nodes_topology.txt";
+    {
+        std::ofstream output(topologyfile);
+        for(size_t node = 0; node <= MAX_NR_NODES; node++) {
+            output << "NODE RESERVOIR " << node << " reservoir_" << node << "\n";
+        }
+    }
+    gc->topologyfile = topologyfile;
+
+    EXPECT_EXIT(gc->DiagnoseTopologyFile(), ::testing::ExitedWithCode(EXIT_FAILURE), ".*");
+
+    std::remove(topologyfile.c_str());
 }
 
 // Test: Diagnose throws on missing actions file

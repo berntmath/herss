@@ -1,0 +1,30 @@
+# Project: 		Hydraulic Economic River System Simulator (HERSS)
+# Programmer: 	Terje Sandø, pump-station work, July 2026, in collab with Claude.
+#               FABELVASSDRAGET - a completely FICTIONAL test river system
+#               (invented names, not modelled on any real river system) built
+#               to stress-test the PUMP node type together with
+#               RESERVOIR_GEOMETRY, SPILLWAY, UNIFORM_NORMALIZED_CURVE,
+#               multi-generator powerstations, and seasonal QMIN (reservoir
+#               auto_qmin + downstream channel qmin shifted +2 days).
+#               72-hour, hourly-resolution test run.
+
+SYSTEMNAME FABELVASSDRAGET
+
+# Input
+INPUTDIR ./
+ACTIONFILE actions.txt
+INFLOWFILE inflowseries.txt
+PRICEFILE pricefile.txt
+TOPOLOGYFILE topology.txt
+STARTSTATEFILE start_state.txt
+
+# Output information 
+OUTSTATEFILE outstate.txt
+WRITE_NODEFILES 1
+OUTPUTDIR ./output/
+
+# Print global system information to screen or not.
+PRINT_GLOBAL_INFO FALSE
+
+# Print economic info to screen or not. 
+PRINT_ECONOMIC_INFO FALSE

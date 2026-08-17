@@ -44,6 +44,12 @@ void Channel::ValidateChannelSettings() {
             + std::to_string(MAX_NR_CASCADED_RESERVOIRS));
     }
 
+    // Terje Sandø, 06.07.2026
+    // Validate QMIN period definitions (date format, year-crossing, coverage gaps, overlaps, negative values).
+    if(qmin_in_use) {
+        this->qmin.validatePeriods(this->nodename);
+    }
+
     // We allocate memory to the cascaded reservoirs if we have not done it already.
     if(this->casc_reservoirs == nullptr) {
         this->casc_reservoirs = 
@@ -111,7 +117,11 @@ int Channel::Simulate(size_t t) {
     if(this->qmin_in_use) {
          double qcost;
          double qmin_requirements = this->qmin.calcQminRequirement(S->year[t], S->month[t], S->day[t], &qcost);  // m3/s
-         if(S->tot_outflow[t]  < qmin_requirements) {
+         // Change by Terje Sandø, 07.07.2026
+         // Tolerance of 1e-3 m3/s (1 liter/s) is close enough to accept as meeting QMIN requirements!?. 
+         // Although this tolerance could also be used just to avoid floating point precision issues and could be pushed down to 1e-12.
+         const double QMIN_TOLERANCE_M3S = 1e-3;
+         if(S->tot_outflow[t]  < qmin_requirements - QMIN_TOLERANCE_M3S) {
              S->cost_qmin[t]  = qcost*S->dt/3600;
          }
     }
@@ -251,35 +261,64 @@ int Channel::ReadNodeData(string filename) {
                     }
 
 
+                    // Terje Sandø, 06.07.2026
+                    // Parse QMIN with seasonal minimum-discharge periods and a per-period economic penalty cost.
+                    // Channel QMIN is a pure economic penalty on the channel's OUTLET flow
+                    //       
+                    //Format: QMIN <nr_periods>
+                    //Each following line:
+                    //Start date, end date, min. discharge, penalty cost 
+                    //DD.MM DD.MM m3s cost
                     if(keyword2.compare("QMIN") == 0) {
                         found_keyword = true;
 
                         this->qmin.nr_periods = atoi(value2.c_str());
-                        //cout << "this->qmin.nr_periods = " << this->qmin.nr_periods << endl; 
 
-                        if(this->qmin.nr_periods  <= 0) {
+                        if(this->qmin.nr_periods <= 0) {
                             this->qmin_in_use = false;
                         } else {
                             this->qmin_in_use = true;
-                            LOG_ERR("WORK IN PROGRESS, BVM May 2026\nThis functionality has not yet been quality controlled");
+                            // LOG_ERR("WORK IN PROGRESS, BVM May 2026\nThis functionality has not yet been quality controlled");
 
-                            // // Now we read in the qmin periods (MAXIMUM 5)
-                            // for(int q = 0; q < this->qmin.nr_periods; q++) {
-                            //     getline(myfile, line);
-                            //     value   = line_obj.extractNextElementFromLine(&line);
-                            //     qmin.timeperiods[q].start_day = atoi(value.substr(0,2).c_str() );
-                            //     qmin.timeperiods[q].start_month  = atoi(value.substr(3,2).c_str() );
+                            if(this->qmin.nr_periods > MAX_NUMBER_OF_QMIN_PERIODS) {
+                                LOG_WARN("QMIN nr_periods out of bounds: " + std::to_string(this->qmin.nr_periods) + " has to be between 1 and " + std::to_string(MAX_NUMBER_OF_QMIN_PERIODS));
+                                LOG_ERR("Check QMIN in topology file " + filename + " for channel " + nodename);
+                            }
+
+                            // Reads each period's DD.MM DD.MM line by number.
+                            // Just checks the text is long enough for substr() - not a real
+                            // date-format check (that happens in Qmin::validatePeriods()).
+                            for(int q = 0; q < this->qmin.nr_periods; q++) {
+                                line = gc->topoparser.getLine(k+q+1);
+
+                                value = line_obj.extractNextElementFromLine(&line);
+                                if(value.length() < 3) {
+                                    LOG_WARN("Qmin period " + std::to_string(q+1) + " start date token '"
+                                        + value + "' is too short to parse. Expected DD.MM format (e.g. 01.04).");
+                                    LOG_ERR("Check QMIN periods in topology file " + filename + " for channel " + nodename + ".");
+                                }
+                                qmin.timeperiods[q].start_day   = atoi(value.substr(0,2).c_str());
+                                qmin.timeperiods[q].start_month = atoi(value.substr(3,2).c_str());
                         
-                            //     value   = line_obj.extractNextElementFromLine(&line);
-                            //     qmin.timeperiods[q].end_day = atoi(value.substr(0,2).c_str() );
-                            //     qmin.timeperiods[q].end_month  = atoi(value.substr(3,2).c_str() );
+                                value = line_obj.extractNextElementFromLine(&line);
+                                if(value.length() < 3) {
+                                    LOG_WARN("Qmin period " + std::to_string(q+1) + " end date token '"
+                                        + value + "' is too short to parse. Expected DD.MM format (e.g. 31.03).");
+                                    LOG_ERR("Check QMIN periods in topology file " + filename + " for channel " + nodename + ".");
+                                }
+                                qmin.timeperiods[q].end_day   = atoi(value.substr(0,2).c_str());
+                                qmin.timeperiods[q].end_month = atoi(value.substr(3,2).c_str());
 
-                            //     value   = line_obj.extractNextElementFromLine(&line);
-                            //     qmin.timeperiods[q].min_discharge = atof(value.c_str() );
+                                value = line_obj.extractNextElementFromLine(&line);
+                                qmin.timeperiods[q].min_discharge = atof(value.c_str());
 
-                            //     value   = line_obj.extractNextElementFromLine(&line);
-                            //     qmin.timeperiods[q].penalty_cost = atof(value.c_str() );   
-                            // }
+                                value = line_obj.extractNextElementFromLine(&line);
+                                qmin.timeperiods[q].penalty_cost = atof(value.c_str());
+                            }
+
+                            // Skip past the period lines just read (k+q+1). 
+                            //Otherwise the next iteration misreads them as invalid keywords and hits LOG_ERR below.
+                            k += this->qmin.nr_periods;
                         }
                     }
 

@@ -141,6 +141,16 @@ int main(int argc, char *argv[]) {
     LOG_INFO("Program runtime (s): " + std::to_string(elapsedMs / 1000.0));
     LOG_INFO("Program runtime (min): " + std::to_string(elapsedMs / 60000.0));
     // LOG_INFO("Program runtime (hours): " + std::to_string(elapsedMs / 3600000.0));
+
+    // Terje Sandø, 06.07.2026
+    // Warnings only go to the log file, not the screen. 
+    // Now the user get a notice to check the log file.
+    size_t n_warnings = Logger::instance().getWarningCount();
+    if(n_warnings > 0) {
+        string warning_word = (n_warnings == 1) ? " warning was" : " warnings were";
+        LOG_INFO("NOTE: " + std::to_string(n_warnings) + warning_word + " logged during this run. Check " + string(logfilename) + " for details.");
+    }
+
     LOG_INFO("HERSS ended normally - bye!");
     
     

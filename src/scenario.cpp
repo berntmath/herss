@@ -89,6 +89,9 @@ Scenario::Scenario(size_t stps, size_t dt, size_t idnr){
         hatchflow_m3s   = new double[stps];
         overflow_m3s    = new double[stps];
         auto_qmin_m3s   = new double[stps];
+        // Terje Sandø, pump-station work, July 2026.
+        pump_in_m3s     = new double[stps];
+        pump_out_m3s    = new double[stps];
         channel_storage_Mm3 = new double[stps];
         adjust_cost         = new double[stps];
 
@@ -147,6 +150,9 @@ Scenario::Scenario(size_t stps, size_t dt, size_t idnr){
         hatchflow_m3s[t]   = NOT_INIT;
         overflow_m3s[t]    = NOT_INIT;
         auto_qmin_m3s[t]   = NOT_INIT;
+        // Terje Sandø, pump-station work, July 2026.
+        pump_in_m3s[t]     = 0.0;
+        pump_out_m3s[t]    = 0.0;
         channel_storage_Mm3[t] = NOT_INIT;
     }
 }
@@ -191,6 +197,8 @@ Scenario::~Scenario(){
     delete [] hatchflow_m3s;
     delete [] overflow_m3s;
     delete [] auto_qmin_m3s;
+    delete [] pump_in_m3s;     // Terje Sandø, pump-station work, July 2026.
+    delete [] pump_out_m3s;    // Terje Sandø, pump-station work, July 2026.
     delete [] channel_storage_Mm3;
     delete [] adjust_cost;
     delete [] cost_aggressive_actions;  
