@@ -16,6 +16,18 @@
 
 
 
+\usepackage[ 
+	bookmarks=true, 
+	bookmarksopen=true, 
+	bookmarksnumbered=true, 
+	colorlinks=true, 
+	linkcolor=blue 
+]{hyperref}
+
+\hypersetup{ pdfpagemode=UseOutlines }
+
+
+
 %% \newcommand{\cmd}[1]{\texttt{#1}}
 \newcommand{\cmd}[1]{\textbf{\texttt{#1}}}
 \newcommand{\folder}[1]{\texttt{#1}}
@@ -531,6 +543,7 @@
 
 	The reservoir is approximated as a rectangular basin with uniform cross-section along its length. The side slopes are parameterised by the angle $\theta$, measured from the horizontal. A derived slope term is computed once at initialisation:
 
+
 	\begin{figure}[h]
 		\centering
 		\includegraphics[width=0.7\textwidth]{./figures/reservoir1.pdf}
@@ -546,18 +559,20 @@
 	The stored volume at water surface elevation $z$ [m.a.s.l.] is then:
 
 	\begin{equation}
-		V(z) = \frac{h \cdot (s + W) \cdot L}{10^6} \quad [\text{Mm}^3]
+		V(z) = \frac{h \cdot (s \cdot h + W) \cdot L}{10^6} \quad [\text{Mm}^3]
 	\end{equation}
 
 	\noindent where $h = z - z_\text{bottom}$ is the depth above the reservoir floor and $W$, $L$ are the bottom width and length respectively. The inverse relation, used to convert a stored volume back to a water surface elevation, is:
 
+
 	\begin{equation}
-		z = z_\text{bottom} + \frac{V \times 10^6}{L \cdot (s + W)}
+		z = z_\text{bottom} + \frac{-L \cdot W + \sqrt{(L \cdot W)^2 + 4 \cdot \ L \cdot s \cdot V}}{2 \cdot L \cdot s}
 	\end{equation}
 
-	Both relations are linear in $h$ (or $V$), making the geometry computationally inexpensive compared to table interpolation on a measured curve.
 
+	
 	\paragraph{Physical interpretation of $\theta$}
+
 
 	The angle $\theta$ describes the inclination of the valley sides:
 	\begin{itemize}

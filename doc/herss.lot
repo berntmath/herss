@@ -1,9 +1,9 @@
-\contentsline {table}{\numberline {1}{\ignorespaces Timeline of the development and contributions to the HERSS project}}{iii}{}%
+\contentsline {table}{\numberline {1}{\ignorespaces Timeline of the development and contributions to the HERSS project}}{iii}{table.0.1}%
 \addvspace {10\p@ }
 \addvspace {10\p@ }
-\contentsline {table}{\numberline {2.1}{\ignorespaces Keywords in the global configuration file.}}{32}{}%
-\contentsline {table}{\numberline {2.2}{\ignorespaces Example of variable temporal resolution input. The time step $\Delta t$ is derived internally from the difference between consecutive timestamps.}}{40}{}%
+\contentsline {table}{\numberline {2.1}{\ignorespaces Keywords in the global configuration file.}}{36}{table.2.1}%
+\contentsline {table}{\numberline {2.2}{\ignorespaces Example of variable temporal resolution input. The time step $\Delta t$ is derived internally from the difference between consecutive timestamps.}}{45}{table.2.2}%
 \addvspace {10\p@ }
-\contentsline {table}{\numberline {3.1}{\ignorespaces Commonly used \texttt {Herss} interface methods available from Python.}}{48}{}%
+\contentsline {table}{\numberline {3.1}{\ignorespaces Commonly used \texttt {Herss} interface methods available from Python.}}{53}{table.3.1}%
 \addvspace {10\p@ }
 \addvspace {10\p@ }

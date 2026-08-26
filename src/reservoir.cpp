@@ -70,8 +70,6 @@ Reservoir::Reservoir(){
     use_spillway                  = false;
     //-----------------------------------------------
 
-
-
     minQ_hatch                     = NOT_INIT;
     maxQ_hatch                     = NOT_INIT;
     hatch_masl                     = NOT_INIT;
@@ -92,9 +90,6 @@ Reservoir::Reservoir(){
     ptr_downstream_node_hatch      = NULL;
     ptr_downstream_node_overflow   = NULL; 
     ptr_downstream_node_auto_qmin  = NULL;
-
-
-
 
 
 }
@@ -163,8 +158,6 @@ double Reservoir::CalcOverflow() {
 
     overflow_m3s = 0.0;
     overflow_Mm3 = 0.0;
-
-    
     
     if(this->use_overflow_curve) {
         masl_start_overflow = this->ovefl_curve_masl[0];  
@@ -278,21 +271,29 @@ double Reservoir::CalcOverflow() {
 }
 ////////////////////////////////////////////////////////////////
 double Reservoir::calcResVolume(double masl) {  // Returns Mm3
+
     double h = masl - bottom_masl;
     if (h < 0.0) {
         LOG_ERR("ERROR: masl (" + std::to_string(masl) + 
         ") is below bottom_masl (" + std::to_string(bottom_masl) + ").\n");
     }
-    double area = (h * slope_term) + width_m* h;
+
+    double area = width_m * h  +  (h * h * slope_term);
     return area * length_m / 1000000.0; // Convert to Mm3
+
 }
 ////////////////////////////////////////////////////////////////
 double Reservoir::calcResMasl(double Mm3) {     // Returns masl
     if (Mm3 < 0.0) {
         LOG_ERR("Error: Mm3 (" + std::to_string(Mm3) + ") is negative in calcResMasl.\n");
     }
-    double h = Mm3 * 1000000.0 / geo_denom;
-    return bottom_masl + h;  // masl 
+
+    double a = length_m * slope_term;
+    double b = length_m * width_m;
+    double c = -1*Mm3*1000000.0;
+    double h_new = (-b + sqrt(b*b - 4*a*c)) / (2*a);
+
+    return bottom_masl + h_new;  // masl 
 }
 ////////////////////////////////////////////////////////////////
 void Reservoir::InitReservoir(void) {
@@ -344,7 +345,6 @@ void Reservoir::InitReservoir(void) {
         }
 
         slope_term = tan((90.0 - theta) * PI / 180.0);
-        geo_denom = length_m * (slope_term + width_m);
 
         filling_at_lrw_Mm3 = calcResVolume(this->res_LRW);
         filling_at_hrw_Mm3 = calcResVolume(this->res_HRW);
@@ -355,10 +355,11 @@ void Reservoir::InitReservoir(void) {
 
         this->reservoir_init_Mm3 = res_Mm3;
         this->reservoir_init_active_Mm3 = res_Mm3 - filling_at_lrw_Mm3;
-
+       
         // Note that reservoir content is the water between HRW and LRW.
         // That volume cannot be used directly to calculate the filling in meters above sea level.
         res_masl = this->calcResMasl(res_Mm3);
+       
         this->reservoir_init_masl = res_masl;
 
         // Calculate filling at hatch level here so do it only once, and not every timestep.

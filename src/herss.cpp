@@ -72,13 +72,10 @@ Herss::Herss(GlobalConfig *gc){
 Herss::~Herss(){
 
     delete rs;
-
-
     for(size_t s=0; s < nr_nodes; s++) {
          delete scen[s];
     }
     delete [] scen;
-
 
     this->gc = NULL;
 }
