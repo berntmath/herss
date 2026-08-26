@@ -3,9 +3,10 @@ Capacity: max_strings=200000, hash_size=200000, hash_prime=170003
 The top-level auxiliary file: herss.aux
 The style file: plainnat.bst
 Database file #1: references.bib
+Warning--I didn't find a database entry for "JobsonFroelich88"
 You've used 7 entries,
             2773 wiz_defined-function locations,
-            643 strings with 5909 characters,
+            645 strings with 5941 characters,
 and the built_in function-call counts, 2770 in all, are:
 = -- 241
 > -- 119
@@ -44,3 +45,4 @@ warning$ -- 0
 while$ -- 26
 width$ -- 0
 write$ -- 103
+(There was 1 warning)

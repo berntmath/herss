@@ -22,8 +22,8 @@ LENGTH_M 1000
 # Angle of the sides of the reservoir, in degrees. 
 # 0 < THETA < 90, close to zero is very flat valley, 
 # close to 90 is almost rectangular cross-section
-THETA 20
-BOTTOM_MASL 745.0
+THETA 45
+BOTTOM_MASL 748.0
 
 # Overflow curve, points, downstream idnr   [masl, m3s]
 OVERFLOW_CURVE 3 2
