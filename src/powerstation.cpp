@@ -173,6 +173,13 @@ int Powerstation::Simulate(size_t t) {
     if (shared_penstock) {
         headloss = this->headlosscoef * total_Q * total_Q;
         Hnetto = Hbrutto - headloss; 
+        //Terje Sandø, August 2026.
+        if(Hnetto < 0.0) {
+            LOG_WARN("WARNING: Negative net head (Hnetto = " + std::to_string(Hnetto) + " m) for POWSTATION node "
+                + std::to_string(int(idnr)) + " (" + nodename + ") at timestep " + std::to_string(t)
+                + " (shared penstock, total_Q = " + std::to_string(total_Q) + " m3/s, Hbrutto = " + std::to_string(Hbrutto)
+                + " m, headloss = " + std::to_string(headloss) + " m). HEADLOSSCOEF may be too large for this head/discharge - this will produce a negative Power estimate.");
+        }
         
         for (size_t g = 0; g < generators.size(); ++g) {
             Q = Q_gen[g];
@@ -208,6 +215,14 @@ int Powerstation::Simulate(size_t t) {
             Q = Q_gen[g];
             headloss = this->headlosscoef * Q * Q; 
             Hnetto   = Hbrutto - headloss; 
+
+            //Terje Sandø, August 2026.
+            if(Hnetto < 0.0) {
+                LOG_WARN("WARNING: Negative net head (Hnetto = " + std::to_string(Hnetto) + " m) for POWSTATION node "
+                    + std::to_string(int(idnr)) + " (" + nodename + "), generator " + std::to_string(g)
+                    + " at timestep " + std::to_string(t) + " (Q = " + std::to_string(Q) + " m3/s, Hbrutto = " + std::to_string(Hbrutto)
+                    + " m, headloss = " + std::to_string(headloss) + " m). HEADLOSSCOEF may be too large for this head/discharge - this will produce a negative Power estimate.");
+            }
             turbine_efficiency = calcEfficiency(g, Q);
             
             if(turbine_efficiency < 0.0) {
@@ -245,6 +260,11 @@ int Powerstation::Simulate(size_t t) {
         double previous_action = 0.0;
         if (t > 0) {
             previous_action = generators[g].action[t-1];
+        } else {
+            // Terje Sandø, August 2026.
+            // At t = 0 the previous state comes from the statefile, so a station that was
+            // already running at the end of the previous run is not charged a start cost.
+            previous_action = (init_Power > 0.01) ? 1.0 : 0.0;
         }
         double current_action = 0.0;
         if (generators[g].action.size() > t) {

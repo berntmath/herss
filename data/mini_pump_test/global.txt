@@ -1,0 +1,31 @@
+# Project: 		Hydraulic Economic River System Simulator (HERSS)
+# Programmer: 	Terje Sandø, pump-station work, July 2026
+#               Minimal generic-name test system for the new PUMP node type.
+#               Topology: pump_AB (0) lifts water from reservoir_B (idnr 3,
+#               SOURCE) up to reservoir_A (idnr 1, TARGET). reservoir_A (1)
+#               -> pstation_A (2) -> reservoir_B (3) -> elv (4) -> sea (-9).
+#               pump_AB is numbered FIRST (lower idnr than both source and
+#               target) per the hard numbering requirement enforced in
+#               Pump::ValidatePumpSettings - see the src/pump.cpp header
+#               comment for the rationale.
+
+SYSTEMNAME mini_pump_test
+
+# Input
+INPUTDIR ./
+ACTIONFILE actions.txt
+INFLOWFILE inflowseries.txt
+PRICEFILE pricefile.txt
+TOPOLOGYFILE topology.txt
+STARTSTATEFILE start_state.txt
+
+# Output information 
+OUTSTATEFILE outstate.txt
+WRITE_NODEFILES 1
+OUTPUTDIR ./output/
+
+# Print global system information to screen or not.
+PRINT_GLOBAL_INFO FALSE
+
+# Print economic info to screen or not. 
+PRINT_ECONOMIC_INFO FALSE

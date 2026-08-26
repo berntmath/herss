@@ -56,12 +56,19 @@ public:
         if (file_.is_open()) file_.close();
     }
 
+    // Terje Sandø, 06.07.2026
+    // Lets main.cpp print a terminal hint at the end of the run if any warnings
+    // were logged, since warnings only go to the log file.
+    size_t getWarningCount() const { return warning_count_; }
+
 private:
     Logger() = default;
     ~Logger() = default;
     Logger(const Logger&) = delete;
     Logger& operator=(const Logger&) = delete;
     std::string logfilename;
+    // Terje Sandø, 06.07.2026, addet warning_count_ to track number of warnings logged during a run.
+    size_t warning_count_ = 0;
 
     void log(LogLevel level, const std::string& text, const char* file, int line, const char* func);
 

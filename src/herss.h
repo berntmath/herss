@@ -46,11 +46,11 @@ SOFTWARE.
 using namespace std;
 
 // BVM May 2026, we start using the version convention MAJOR.MINOR.PATCH
-const string VERSION = "3.1.03";
-const string VERSION_DATE = "20260611";
+const string VERSION = "4.0.00"; //Since we now have four node types;)
+const string VERSION_DATE = "20260814";
 
 // Maximum number of nodes allowed. // to save coding
-#define MAX_NR_NODES 30
+#define MAX_NR_NODES 250
 // Maximum number of coloumns (words or tokens) in one line
 #define MAX_WORDS 200
 
@@ -143,10 +143,11 @@ enum NodeType
 {
    RESERVOIR,
    PSTATION,
-   CHANNEL
+   CHANNEL,
+   PUMP
 };
 
-const size_t NODE_TYPE_COUNT = 3;
+const size_t NODE_TYPE_COUNT = 4;
 
 inline const char* EnumToString(NodeType v)
 {
@@ -155,6 +156,7 @@ inline const char* EnumToString(NodeType v)
         case RESERVOIR:   return "RESERVOIR";
         case PSTATION:   return "PSTATION";
         case CHANNEL: return "CHANNEL";
+        case PUMP: return "PUMP";
     }
     return "VOID";
 }
@@ -167,6 +169,7 @@ class GlobalConfig;
 class Channel;
 class SystemState;
 class Herss;
+class Pump;
 
 class CascadedReservoirs;
 
@@ -324,6 +327,7 @@ public:
     size_t nr_pstations;
     size_t nr_reservoirs;
     size_t nr_channels;
+    size_t nr_pumps;
     size_t dt;     // Delta time step in seconds
     size_t stps;   // Nr of time steps in the simulation
     size_t dt_last; 
@@ -424,6 +428,8 @@ public:
     double *hatchflow_m3s;
     double *overflow_m3s;
     double *auto_qmin_m3s;
+    double *pump_in_m3s;   // Water pumped into this reservoir [m3/s]
+    double *pump_out_m3s;  // Water pumped out of this reservoir [m3/s]
     double *channel_storage_Mm3;
 
     double *res_Mm3;          // Reservoir filling in Mm3
@@ -478,7 +484,12 @@ class Qmin {
     bool qmin_flag;
     QminPeriod timeperiods[MAX_NUMBER_OF_QMIN_PERIODS];
     int nr_periods;
-    double calcQminRequirement(int year, int month, int day, double *cost );
+    double calcQminRequirement(int year, int month, int day, double *cost);
+    // Terje Sandø, 02.07.2026, extended 06.07.2026
+    // Validates qmin period definitions at startup. Shared by Reservoir OUTLET_AUTO_QMIN
+    // and Channel QMIN. Catches topology file errors (bad dates, gaps, overlaps) with clear
+    // error messages before any simulation timestep is computed.
+    void validatePeriods(string nodename);
 };
 
 //////////////////////////////////////////////////////////////////////////////////////////
@@ -670,6 +681,16 @@ class Reservoir: public Node {
     double spillway_level_masl;  // The level of the spillway in masl
     bool use_spillway; 
 
+    // Terje Sandø, 02.07.2026
+    // MASL of the outlet_auto_min on the reservoir.
+    // Water can only flow out when the reservoir level exceeds this threshold.
+    // Prevents the model from releasing water that is physically below the pipe.
+    double outlet_auto_qmin_masl;
+
+
+    // Reverse mapping: pumps using this reservoir as source or target (for averaged-head computation).
+    std::vector<Pump*> ptr_pumps_as_source;
+    std::vector<Pump*> ptr_pumps_as_target;
 
     ArrayCurve ac_res_masl_2_Mm3;
     ArrayCurve ac_res_Mm3_2_masl;
@@ -837,6 +858,65 @@ class Channel: public Node {
 
 };
 /////////////////////////////////////////////////////////////////////////////////////////
+// Terje Sandø, pump-station work, July 2026.
+class Pump: public Node {
+    public:
+    Pump();
+    ~Pump();
+    size_t stps;
+    size_t dt;
+    GlobalConfig *gc;
+
+    // --- Topology-configured parameters (PUMP_SOURCE_IDNR / PUMP_TARGET_IDNR / etc.) ---
+    size_t pump_source_idnr;
+    size_t pump_target_idnr;
+    bool pump_source_target_in_use;  // Both keywords found and validated at ReadNodeData time.
+    Node *ptr_pump_source;
+    Node *ptr_pump_target;
+
+    double pump_inlet_masl;          // PUMP_INLET_MASL - water below this in source is inaccessible.
+    double max_discharge;
+    double headlosscoef;
+    double static_motor_efficiency;  // STATIC_MOTOR_EFFICIENCY, combined motor/transformer losses, (0,1].
+    double pump_startstop;           // PUMP_STARTSTOP - cost of one start or one stop event.
+    double init_Power;               // Energy [MWh] consumed in the last timestep of the previous run, read from the statefile.
+
+    // Source and target reservoir levels at the start and end of the current
+    // timestep, written by those reservoirs during their own Simulate().
+    double src_start_masl;
+    double src_end_masl;
+    double tgt_start_masl;
+    double tgt_end_masl;
+
+    // Efficiency curve (Q-dependent), mirrors Generator::eff_curve / uniform_normalized_curve.
+    ArrayCurve pump_eff_curve;
+    double uniform_normalized_curve[N_UNIFORM_EFF_CURVE_POINTS];
+    bool use_uniform_normalized_curve;
+    std::vector<double> pump_curve_Q;      // Non-uniform PUMP_CURVE points, if used instead.
+    std::vector<double> pump_curve_psnt;
+
+    // Per-timestep bookkeeping, sized to stps in initArrayCurves(). Needed for
+    // WriteNodeOutput and CheckWaterBalance.
+    std::vector<double> actual_pumped_Mm3;
+    std::vector<double> pump_cost_euro;
+    std::vector<double> pump_power_MW;
+
+    int ReadNodeData(string filename);
+    int ReadStateFile(string filename);
+    int Simulate(size_t t);
+    int CalcPowerAndCost(size_t t);  // Head, power and cost for timestep t. Run after the reservoirs have updated their levels.
+    int initArrayCurves(void);
+    int CheckWaterBalance(class Herss *herss_obj);
+    double GetStartWater_Mm3(void);
+    double GetEndWater_Mm3(void);
+    int WriteNodeOutput(GlobalConfig *gc);
+    int WriteStateFile(FILE *fp);
+
+    void ValidatePumpSettings();  // Mirrors Powerstation::ValidatePowerstationSettings.
+    double calcEfficiency(double q_m3s);
+
+};
+/////////////////////////////////////////////////////////////////////////////////////////
 // This class models a hydropower system
 class Riversystem {
 
@@ -849,6 +929,7 @@ public:
     size_t nr_reservoirs;
     size_t nr_pstations;
     size_t nr_channels;
+    size_t nr_pumps;
 
     double start_water_Mm3;
     double end_water_Mm3;
@@ -882,11 +963,12 @@ public:
     double ValueFunction[500];  // We store the value function for each timestep.
     double WaterValue[500];  // We store the water value for each timestep.
 
-    // Array of Nodes (reservoirs, powerstations, channels)
+    // Array of Nodes (reservoirs, powerstations, channels, pumps)
     Node **nodes;
     Reservoir *reservoirs;
     Powerstation *pstations;
     Channel *channels;
+    Pump *pumps;
     double Simulate(int id);
     double CalcVF(double restprice);
     double CalcVF_atEndOfStp(double restprice, size_t stp);  // Calculate the value function at a specific timestep

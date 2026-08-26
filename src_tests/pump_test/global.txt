@@ -1,0 +1,22 @@
+# Global config for the permanent PUMP gtest fixture (src_tests/test_pump.cpp).
+# Copied from data/mini_pump_test/ - see that folder's global.txt for the full
+# topology description. Kept in sync manually; if data/mini_pump_test/ changes,
+# update this copy too.
+
+SYSTEMNAME pump_test
+
+# Input
+INPUTDIR ../src_tests/pump_test/
+ACTIONFILE actions.txt
+INFLOWFILE inflowseries.txt
+PRICEFILE pricefile.txt
+TOPOLOGYFILE topology.txt
+STARTSTATEFILE start_state.txt
+
+# Output information
+OUTSTATEFILE outstate.txt
+WRITE_NODEFILES 0
+OUTPUTDIR ../src_tests/pump_test/output/
+
+PRINT_GLOBAL_INFO FALSE
+PRINT_ECONOMIC_INFO FALSE

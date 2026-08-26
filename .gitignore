@@ -21,9 +21,11 @@ obj/
 *.fls
 *.fdb_latexmk
 
+# Auto-generated plots from an undocumented Python plotting function
+# (only matches dataset output/plots/ folders, not the top-level plots/ scripts folder)
+**/output/plots/
 
-# Private data folder for work
-data/*
-
+# Not ready to be pushed yet
+input_generator/
 
 

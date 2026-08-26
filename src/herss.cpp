@@ -171,8 +171,20 @@ int Herss::prepaireSimulation(Dataset *data) {
                 rs->nodes[node_id]->idnr = node_id;   
                 rs->nodes[node_id]->nodetype = NodeType::CHANNEL;
             }
+            // Terje Sandø, pump-station work, July 2026.
+            else if (value == "PUMP") {
+                str_idnr = line_obj.extractNextElementFromLine(&line);
+                str_name = line_obj.extractNextElementFromLine(&line);
+                size_t node_id = std::stoul(str_idnr);
+                if (node_id >= gc->nr_nodes) {
+                    LOG_ERR("Error: Node ID " + std::to_string(node_id) + " exceeds the number of nodes (" + std::to_string(gc->nr_nodes) + ")");
+                }
+                rs->nodes[node_id]->nodename = str_name;
+                rs->nodes[node_id]->idnr = node_id;   
+                rs->nodes[node_id]->nodetype = NodeType::PUMP;
+            }
             else {
-                LOG_ERR("ERROR: Invalid nodetype in topology file it must be RESERVOIR, PSTATION or CHANNEL" + gc->topologyfile);
+                LOG_ERR("ERROR: Invalid nodetype in topology file it must be RESERVOIR, PSTATION, CHANNEL or PUMP" + gc->topologyfile);
             }
         }
     }
@@ -306,6 +318,32 @@ int Herss::prepaireSimulation(Dataset *data) {
         LOG_ERR("WARNING: No action column names found in dataset, generator actions initialized to zero");
     }
 
+    // Terje Sandø, pump-station work, July 2026.
+    // PUMP nodes always have exactly one action column (single unit in v1),
+    // named by the only pump idnr in the action file.
+    if(!data->action_colnames.empty()) {
+        for (size_t n = 0; n < gc->nr_nodes; ++n) {
+            Node* node = rs->nodes[n];
+            if(node->nodetype == NodeType::PUMP) {
+
+                int col_idx = -1;
+                for (size_t c = 0; c < data->action_colnames.size(); ++c) {
+                    if (data->action_colnames[c] == std::to_string(node->idnr)) {
+                        col_idx = c;
+                        break;
+                    }
+                }
+
+                if (col_idx == -1) {
+                    LOG_ERR("ERROR: Could not find action column for PUMP node " + std::to_string(node->idnr) + " in action file");
+                }
+
+                for (size_t t = 0; t < data->stps; ++t) {
+                    node->S->action[t][node->idnr] = data->action[t][col_idx];
+                }
+            }
+        }
+    }
 
 
     return 0;
@@ -349,6 +387,32 @@ void Herss::SetPointers() {
         if( rs->nodes[n]->outlet_auto_qmin_in_use ) {
             rs->nodes[n]->ptr_downstream_node_auto_qmin = rs->nodes[rs->nodes[n]->downstream_idnr_auto_qmin];
         }
+
+        // Terje Sandø, pump-station work, July 2026.
+        if( rs->nodes[n]->nodetype == NodeType::PUMP ) {
+            Pump* pump = static_cast<Pump*>(rs->nodes[n]);
+            if(pump->pump_source_idnr == NOT_INIT || pump->pump_target_idnr == NOT_INIT) {
+                LOG_WARN("ERROR: PUMP node " + std::to_string(int(n)) + " (" + pump->nodename + ") is missing PUMP_SOURCE_IDNR/PUMP_TARGET_IDNR.");
+                LOG_ERR("Check your topology file - a PUMP node must define both PUMP_SOURCE_IDNR and PUMP_TARGET_IDNR.");
+            }
+            if(pump->pump_source_idnr > (this->nr_nodes-1) || pump->pump_target_idnr > (this->nr_nodes-1)) {
+                LOG_WARN("ERROR: PUMP node " + std::to_string(int(n)) + " (" + pump->nodename + ") PUMP_SOURCE_IDNR/PUMP_TARGET_IDNR out of range.");
+                LOG_ERR("Please check PUMP_SOURCE_IDNR/PUMP_TARGET_IDNR in the topology file.");
+            }
+            pump->pump_source_target_in_use = true;
+            pump->ptr_pump_source = rs->nodes[pump->pump_source_idnr];
+            pump->ptr_pump_target = rs->nodes[pump->pump_target_idnr];
+
+            // Let source/target reservoirs push their start/end MASL into the pump
+            // each timestep, so the pump computes a stable averaged head (same
+            // convention as Powerstation).
+            if(pump->ptr_pump_source->nodetype == NodeType::RESERVOIR) {
+                static_cast<Reservoir*>(pump->ptr_pump_source)->ptr_pumps_as_source.push_back(pump);
+            }
+            if(pump->ptr_pump_target->nodetype == NodeType::RESERVOIR) {
+                static_cast<Reservoir*>(pump->ptr_pump_target)->ptr_pumps_as_target.push_back(pump);
+            }
+        }
     }
 }
 /////////////////////////////////////////////////////////////////////
@@ -376,6 +440,10 @@ void Herss::SetAction(size_t node_idnr, size_t gen_idnr, size_t t, double value)
         }
         ps->generators[gen_idnr].action[t] = value;
     }
+    else if (rs->nodes[node_idnr]->nodetype == NodeType::PUMP) {
+        Pump* pump = static_cast<Pump*>(rs->nodes[node_idnr]);
+        pump->S->action[t][node_idnr] = value;
+    }
     else if (rs->nodes[node_idnr]->nodetype == NodeType::RESERVOIR) {
         Reservoir* res = static_cast<Reservoir*>(rs->nodes[node_idnr]);
         if (!res->outlet_hatch_in_use) {
@@ -384,7 +452,7 @@ void Herss::SetAction(size_t node_idnr, size_t gen_idnr, size_t t, double value)
         res->S->action[t][node_idnr] = value;
     }
     else {
-        LOG_ERR("SetAction: node " + std::to_string(node_idnr) + " is not a PSTATION or RESERVOIR");
+        LOG_ERR("SetAction: node " + std::to_string(node_idnr) + " is not a PSTATION, PUMP or RESERVOIR");
     }
 
     // Old code before multi-generator support    
@@ -401,6 +469,10 @@ double Herss::GetAction(size_t node_idnr, size_t gen_idnr, size_t t) {
         }
         return ps->generators[gen_idnr].action[t];
     }
+    else if (rs->nodes[node_idnr]->nodetype == NodeType::PUMP) {
+        Pump* pump = static_cast<Pump*>(rs->nodes[node_idnr]);
+        return pump->S->action[t][node_idnr];
+    }
     else if (rs->nodes[node_idnr]->nodetype == NodeType::RESERVOIR) {
         Reservoir* res = static_cast<Reservoir*>(rs->nodes[node_idnr]);
         if (!res->outlet_hatch_in_use) {
@@ -409,7 +481,7 @@ double Herss::GetAction(size_t node_idnr, size_t gen_idnr, size_t t) {
         return res->S->action[t][node_idnr];
     }
     else {
-        LOG_ERR("GetAction: node " + std::to_string(node_idnr) + " is not a PSTATION or RESERVOIR");
+        LOG_ERR("GetAction: node " + std::to_string(node_idnr) + " is not a PSTATION, PUMP or RESERVOIR");
     }
 
     return -9.0;
@@ -673,6 +745,13 @@ int Herss::Simulate() {
             ArrayCurve::setCurrentNode(rs->nodes[n]->idnr, rs->nodes[n]->nodename);
                     
             rs->nodes[n]->Simulate(t);
+        }
+        
+        // Terje Sandø, pump-station work, August 2026.
+        // Pump power and cost require average source and target reservoir levels,
+        // so calculate them after all nodes have completed this timestep.
+        for(size_t p = 0; p < gc->nr_pumps; p++) {
+            rs->pumps[p].CalcPowerAndCost(t);
         }
     }
 

@@ -11,10 +11,13 @@ static GlobalConfig* makeGC(size_t stps,
     gc->nr_reservoirs = 0;
     gc->nr_pstations  = 0;
     gc->nr_channels   = 0;
+    gc->nr_pumps      = 0; // GlobalConfig defaults this to NOT_INIT; Riversystem's
+                           // constructor does `new Pump[gc->nr_pumps]`, so this
+                           // must be explicitly zeroed here like the other counts.
     for (size_t i = 0; i < types.size(); ++i) {
         gc->nodetypes[i] = types[i];
         if (types[i] == NodeType::RESERVOIR) gc->nr_reservoirs++;
-        if (types[i] == NodeType::POWERSTATION) gc->nr_pstations++;
+        if (types[i] == NodeType::PSTATION) gc->nr_pstations++;
         if (types[i] == NodeType::CHANNEL) gc->nr_channels++;
     }
     return gc;
@@ -50,7 +53,7 @@ protected:
 };
 
 TEST_F(RiversystemTest, Constructor_WiresNodesByType) {
-    gc = makeGC(3, {RESERVOIR, POWERSTATION, CHANNEL});
+    gc = makeGC(3, {RESERVOIR, PSTATION, CHANNEL});
     rs = new Riversystem(gc);
     ASSERT_EQ(rs->nr_nodes, 3u);
     ASSERT_EQ(rs->nr_reservoirs, 1u);
@@ -66,13 +69,13 @@ TEST_F(RiversystemTest, Constructor_WiresNodesByType) {
 }
 
 TEST_F(RiversystemTest, GetEndingReservoirLevel_ReturnsLastFraction) {
-    gc = makeGC(4, {RESERVOIR, POWERSTATION});
+    gc = makeGC(4, {RESERVOIR, PSTATION});
     rs = new Riversystem(gc);
     // Attach scenarios
     attachScenario(rs->nodes[0], gc->stps, gc->dt);
     attachScenario(rs->nodes[1], gc->stps, gc->dt);
     rs->nodes[0]->nodetype = RESERVOIR;
-    rs->nodes[1]->nodetype = POWERSTATION;
+    rs->nodes[1]->nodetype = PSTATION;
     // Set reservoir end fraction
     rs->reservoirs[0].S->res_fr[gc->stps - 1] = 0.73;
     double got = rs->GetEndingReservoirLevel(0);
@@ -87,7 +90,7 @@ TEST_F(RiversystemTest, GetEndingReservoirLevel_OutOfRange_Exit) {
 }
 
 TEST_F(RiversystemTest, CalcSimulationProfit_SumsIncomeMinusCostAcrossNodes) {
-    gc = makeGC(3, {RESERVOIR, POWERSTATION, CHANNEL});
+    gc = makeGC(3, {RESERVOIR, PSTATION, CHANNEL});
     rs = new Riversystem(gc);
     for (size_t i = 0; i < gc->nr_nodes; ++i) attachScenario(rs->nodes[i], gc->stps, gc->dt);
     // Fill incomes/costs
@@ -108,12 +111,12 @@ TEST_F(RiversystemTest, CalcSimulationProfit_SumsIncomeMinusCostAcrossNodes) {
 }
 
 TEST_F(RiversystemTest, CalcVF_ComputesValueFunctionAndTotals) {
-    gc = makeGC(3, {RESERVOIR, POWERSTATION, CHANNEL});
+    gc = makeGC(3, {RESERVOIR, PSTATION, CHANNEL});
     rs = new Riversystem(gc);
     for (size_t i = 0; i < gc->nr_nodes; ++i) attachScenario(rs->nodes[i], gc->stps, gc->dt);
     // Set nodetypes explicitly since topology reader isn't invoked in this unit test
     rs->nodes[0]->nodetype = RESERVOIR;
-    rs->nodes[1]->nodetype = POWERSTATION;
+    rs->nodes[1]->nodetype = PSTATION;
     rs->nodes[2]->nodetype = CHANNEL;
 
     // Set downstream totals for remaining water bookkeeping

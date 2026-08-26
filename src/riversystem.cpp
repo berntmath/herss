@@ -22,6 +22,8 @@ Riversystem::Riversystem(GlobalConfig *gc) {
     this->nr_reservoirs = gc->nr_reservoirs;
     this->nr_pstations  = gc->nr_pstations;
     this->nr_channels   = gc->nr_channels;
+    // Terje Sandø, pump-station work, July 2026.
+    this->nr_pumps      = gc->nr_pumps;
 
     nodes = new Node*[nr_nodes];
 
@@ -44,11 +46,20 @@ Riversystem::Riversystem(GlobalConfig *gc) {
             channels[c].gc = gc;
         }
     }
+    
+    // Terje Sandø, pump-station work, July 2026.
+    if(nr_pumps > 0) {
+        pumps = new Pump[nr_pumps];
+        for(size_t p = 0; p < nr_pumps; p++) {
+            pumps[p].gc = gc;
+        }
+    }
 
     
     size_t reservoirs_used = 0;
     size_t pstations_used = 0;
     size_t channels_used = 0;
+    size_t pumps_used = 0;
 
     for(size_t n = 0; n < nr_nodes; n++) {
 
@@ -70,6 +81,12 @@ Riversystem::Riversystem(GlobalConfig *gc) {
                 nodes[n] = &channels[channels_used];
                 nodes[n]->idnr = n;
                 channels_used++;
+                break;
+            // Terje Sandø, pump-station work, July 2026.
+            case PUMP:
+                nodes[n] = &pumps[pumps_used];
+                nodes[n]->idnr = n;
+                pumps_used++;
                 break;
         }
     }
@@ -94,6 +111,10 @@ Riversystem::~Riversystem(){
     }
     if(nr_channels > 0) {
         delete [] channels;
+    }
+    // Terje Sandø, pump-station work, July 2026.
+    if(nr_pumps > 0) {
+        delete [] pumps;
     }
 }
 ///////////////////////////////////////////////////////////////////
@@ -401,6 +422,11 @@ void Riversystem::DiagnoseRiversystemConfiguration() {
        channels[c].ValidateChannelSettings();
     }
 
+    // Terje Sandø, pump-station work, July 2026.
+    for(size_t p = 0; p < gc->nr_pumps; p++) {
+       pumps[p].ValidatePumpSettings();
+    }
+
 }
 //////////////////////////////////////////////////////////////////////
 double Riversystem::CalcVF(double restprice) {
@@ -592,6 +618,18 @@ int Riversystem::WriteRiverSystemData(double restprice) {
     tot_profit_Euro = tot_income_Euro - tot_cost_Euro;
     valuefunction_Euro = tot_profit_Euro + tot_remaining_Euro;
 
+    // Terje Sandø, pump-station work, August 2026.
+    // A pump stores its consumption as negative Power [MWh], so the sign is flipped here
+    // to report the consumed energy as a positive number.
+    double sum_pump_consumption = 0.0;
+    for(size_t n = 0; n < nr_nodes; n++) {
+        if(nodes[n]->nodetype == NodeType::PUMP) {
+            for(size_t t = 0; t < gc->stps; t++) {
+                sum_pump_consumption -= nodes[n]->S->Power[t];
+            }
+        }
+    }
+
     fprintf(fp,"-------------------------------------------\n");
     fprintf(fp,"GLOBAL WATERBALANCE\n");
     fprintf(fp,"start_water_Mm3   = %.6f\n", start_water_Mm3 );
@@ -638,7 +676,7 @@ int Riversystem::WriteRiverSystemData(double restprice) {
     sum_startstopcost = 0.0;
     sum_max_adjustment_cost = 0.0;
     for(size_t n = 0; n < nr_nodes; n++) {
-        if(nodes[n]->nodetype == NodeType::PSTATION) { 
+        if(nodes[n]->nodetype == NodeType::PSTATION || nodes[n]->nodetype == NodeType::PUMP) { 
             for(size_t t = 0; t < gc->stps; t++) {
                 sum_startstopcost += nodes[n]->S->startStopCost[t] ;
                 sum_max_adjustment_cost += nodes[n]->S->adjust_cost[t];
@@ -670,6 +708,7 @@ int Riversystem::WriteRiverSystemData(double restprice) {
     fprintf(fp, "tot_remaining_MWh            = %.3f\n", tot_remaining_MWh);
     fprintf(fp, "tot_remaining_Euro           = %.3f\n", tot_remaining_Euro);
     fprintf(fp, "Sum_Production_MWh           = %.3f\n", sum_production);
+    fprintf(fp, "Sum_Pump_Consumption_MWh     = %.3f\n", sum_pump_consumption);
     fprintf(fp, "tot_income_Euro              = %.3f\n", tot_income_Euro);
 
     if(sum_production > 1.0) {

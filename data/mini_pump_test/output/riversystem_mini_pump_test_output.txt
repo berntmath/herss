@@ -1,0 +1,35 @@
+Riversystem mini_pump_test
+Node Idnr Nodename          Nodetype int Nodetypename Remaining_Mm3
+Node  0 PUMP                 Nodetype 3  PUMP                  0.0000 
+Node  1 Reservoir_A          Nodetype 0  RESERVOIR             22.8456 
+Node  2 River_A              Nodetype 2  CHANNEL               0.0000 
+Node  3 HYDRO_POWERSTATION_A Nodetype 1  PSTATION              0.0000 
+Node  4 Reservoir_B          Nodetype 0  RESERVOIR             9.0721 
+Node  5 River_B              Nodetype 2  CHANNEL               0.0000 
+-------------------------------------------
+GLOBAL WATERBALANCE
+start_water_Mm3   = 31.506000
+inflow_volume_Mm3 = 0.414720
+outflow_Mm3       = 0.003000
+end_water_Mm3     = 31.917720
+waterbalance      = 0.000000
+Note that there might be dead water below LRW in the system
+-------------------------------------------
+Average_price_Euro           = 47.250
+RestPrice_Euro               = 30.000
+tot_remaining_Mm3            = 31.918
+tot_active_remaining_Mm3     = 23.918
+tot_remaining_MWh            = 1400.880
+tot_remaining_Euro           = 42026.388
+Sum_Production_MWh           = 49.338
+Sum_Pump_Consumption_MWh     = 87.842
+tot_income_Euro              = 4008.355
+Avg_achieved_price_E_MWh     = 81.243
+sum_qmin_cost_Euro           = 0.000
+sum_lrw_cost_Euro            = 0.000
+sum_startstopcost_Euro       = 305.000
+sum_max_adjustment_cost      = 0.000
+sum_aggressive_actions_cost  = 0.000
+tot_cost_Euro                = 1468.057
+tot_profit_Euro              = 2540.298
+valuefunction_Euro           = 44566.686

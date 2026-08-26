@@ -545,6 +545,33 @@ TEST_F(PowerstationTest, Simulate_NoStartStopCost_WhenRunningContinuously)
     EXPECT_EQ(powerstation->S->startStopCost[1], 0.0);
 }
 
+// The statefile decides what happened BEFORE t=0. A station that was already running at
+// the end of the previous run must not be charged a start cost for continuing to run.
+TEST_F(PowerstationTest, Simulate_FirstTimestep_UsesStartStateFromStatefile)
+{
+    setupSvoletjonn(); // startstop cost = 2.0
+    powerstation->generators[0].action[0] = 0.5;
+
+    powerstation->init_Power = 5.0; // was producing at the end of the previous run
+    powerstation->Simulate(0);
+    EXPECT_EQ(powerstation->S->startStopCost[0], 0.0);
+
+    powerstation->init_Power = 0.0; // was off at the end of the previous run
+    powerstation->Simulate(0);
+    EXPECT_EQ(powerstation->S->startStopCost[0], 1.0);
+}
+
+// A station that was running and is then switched off in the first timestep pays a stop cost.
+TEST_F(PowerstationTest, Simulate_FirstTimestep_ShutdownFromStartState)
+{
+    setupSvoletjonn();
+    powerstation->generators[0].action[0] = 0.0;
+
+    powerstation->init_Power = 5.0; // was running, now off
+    powerstation->Simulate(0);
+    EXPECT_EQ(powerstation->S->startStopCost[0], 1.0);
+}
+
 // Multiple Generator Tests
 TEST_F(PowerstationTest, Simulate_DualGenerators_CombinedOutput)
 {

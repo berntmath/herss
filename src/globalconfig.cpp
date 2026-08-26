@@ -51,6 +51,7 @@ GlobalConfig::GlobalConfig(){
     this->nr_pstations       = NOT_INIT;
     this->nr_reservoirs      = NOT_INIT;
     this->nr_channels        = NOT_INIT;
+    this->nr_pumps           = NOT_INIT;
 
     for(size_t n = 0; n < MAX_NR_NODES; n++) {
         actions_idnrs[n] = NOT_INIT;
@@ -128,6 +129,7 @@ void GlobalConfig::DiagnoseTopologyFile() {
     this->nr_pstations  = 0;
     this->nr_reservoirs = 0; 
     this->nr_channels   = 0;
+    this->nr_pumps      = 0;
 
 	myfile.open(this->topologyfile.c_str() );
 
@@ -146,6 +148,10 @@ void GlobalConfig::DiagnoseTopologyFile() {
             keyword = line_obj.extractNextElementFromLine(&line);
             value   = line_obj.extractNextElementFromLine(&line);
             if (keyword.compare("NODE") == 0) {
+                if(this->nr_nodes >= MAX_NR_NODES) {
+                    LOG_ERR("The topology file " + this->topologyfile + " contains more than the maximum supported number of nodes ("
+                        + std::to_string(MAX_NR_NODES) + "). If the model indeed contains more nodes, increase MAX_NR_NODES in herss.h and rebuild the software.");
+                }
                 if (value.compare("RESERVOIR") == 0) {
                     this->nr_reservoirs++;
                     nodetypes[this->nr_nodes] = NodeType::RESERVOIR;
@@ -157,6 +163,10 @@ void GlobalConfig::DiagnoseTopologyFile() {
                 if (value.compare("CHANNEL") == 0) {
                     this->nr_channels++;
                     nodetypes[this->nr_nodes] = NodeType::CHANNEL;
+                }
+                if (value.compare("PUMP") == 0) {
+                    this->nr_pumps++;
+                    nodetypes[this->nr_nodes] = NodeType::PUMP;
                 }
                 this->nr_nodes++;
             }
@@ -178,6 +188,7 @@ void GlobalConfig::Diagnose() {
     this->nr_pstations  = 0;
     this->nr_reservoirs = 0; 
     this->nr_channels   = 0;
+    this->nr_pumps      = 0;
 
     topoparser.loadFile(this->topologyfile);
 
@@ -191,6 +202,11 @@ void GlobalConfig::Diagnose() {
         value   = line_obj.extractNextElementFromLine(&line);
 
         if (keyword.compare("NODE") == 0) {
+            //Terje Sandø, nr_of_nodes check, August 2026.
+            if(this->nr_nodes >= MAX_NR_NODES) {
+                LOG_ERR("The topology file " + this->topologyfile + " contains more than the maximum supported number of nodes ("
+                    + std::to_string(MAX_NR_NODES) + "). If the model indeed contains more nodes, increase MAX_NR_NODES in herss.h and rebuild the software.");
+            }
              if (value.compare("RESERVOIR") == 0) {
                 nodetypes[this->nr_nodes] = NodeType::RESERVOIR;
                 this->nr_reservoirs++;
@@ -202,6 +218,12 @@ void GlobalConfig::Diagnose() {
             if (value.compare("CHANNEL") == 0) {
                 nodetypes[this->nr_nodes] = NodeType::CHANNEL;
                 this->nr_channels++;
+            }
+            if (value.compare("PUMP") == 0) {
+                nodetypes[this->nr_nodes] = NodeType::PUMP;
+                this->nr_pumps++;
+                // A PUMP has only one action node, and this step counts 
+                this->n_action_nodes_from_topology++;
             }
             this->nr_nodes++;
         }

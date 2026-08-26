@@ -21,7 +21,7 @@ void Logger::log(LogLevel level, const std::string& text, const char* file, int 
     std::lock_guard<std::mutex> lock(mtx_);
 
     const char* lvl = "MSG";
-    if (level == LogLevel::Warning) lvl = "WRN";
+    if (level == LogLevel::Warning) { lvl = "WRN"; warning_count_++; }
     if (level == LogLevel::Error)   lvl = "ERR";
 
     std::ostringstream entry;

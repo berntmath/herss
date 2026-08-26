@@ -1,0 +1,18 @@
+# STATEFILE MINI UTAHPS
+# BVM May 2026
+
+# RESERVOIRS
+NODE RESERVOIR 0 HJELLE 0.67
+
+# NODE PSTATION IDNR NAME MWh
+NODE PSTATION 1 SVOLETJONN 0.0
+
+# CHANNELS
+# Note there is a new format. 
+# After th enode information we need to provide the starting water storage in each linear reservoir. 
+# Number of values must be the same as specified in the topology file (N_CASCADE_LINRES 3)
+# NODE CHANNEL IDNR NAME LINRES1_Mm3 LINRES2_Mm3 LINRES3_Mm3
+NODE CHANNEL 2 VANAROSEN 0.001 0.002 0.003
+
+## END 
+

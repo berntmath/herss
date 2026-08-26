@@ -1,0 +1,456 @@
+##########################################################################
+# TOPOLOGY FILE - FABELVASSDRAGET ("The Fable River System")
+# Terje Sandø, pump-station work, July 2026.
+#
+# Purpose: a large, richly-connected stress test for the new PUMP node type,
+# exercising RESERVOIR_GEOMETRY (not RESERVOIR_CURVE), SPILLWAY (not
+# OVERFLOW_CURVE), UNIFORM_NORMALIZED_CURVE (not TURBINE_CURVE/PUMP_CURVE),
+# multiple generators per powerstation, seasonal OUTLET_AUTO_QMIN together
+# with a downstream CHANNEL QMIN shifted +2 days to account for the
+# asymptotic lag of cascaded-linear-reservoir routing
+##########################################################################
+
+#######################################################################################
+# HEISVERKET - PUMP. Source=TROLLDAMMEN(14), target=SKYFONNA(10)
+NODE PUMP 0 HEISVERKET
+PUMP_SOURCE_IDNR 14
+PUMP_TARGET_IDNR 10
+PUMP_INLET_MASL 193.0
+MAX_DISCHARGE 15.0
+HEADLOSSCOEF 0.045
+STATIC_MOTOR_EFFICIENCY 0.97
+PUMP_STARTSTOP 2.5
+UNIFORM_NORMALIZED_CURVE 11
+0.0	0
+0.1	40
+0.2	65
+0.3	80
+0.4	88
+0.5	92
+0.6	92
+0.7	90
+0.8	87
+0.9	83
+1.0	78
+ENDNODE
+#######################################################################################
+
+#######################################################################################
+# OPPLOFT - PUMP. Source=SALTVIKA(16), target=TROLLDAMMEN(14)
+NODE PUMP 1 OPPLOFT
+PUMP_SOURCE_IDNR 16
+PUMP_TARGET_IDNR 14
+PUMP_INLET_MASL 12.0
+MAX_DISCHARGE 50.0
+HEADLOSSCOEF 0.0075
+STATIC_MOTOR_EFFICIENCY 0.97
+PUMP_STARTSTOP 4.0
+UNIFORM_NORMALIZED_CURVE 11
+0.0	0
+0.1	40
+0.2	65
+0.3	80
+0.4	88
+0.5	92
+0.6	92
+0.7	90
+0.8	87
+0.9	83
+1.0	78
+ENDNODE
+#######################################################################################
+
+#######################################################################################
+# DUGGTJERN - high headwater tarn
+NODE RESERVOIR 2 DUGGTJERN
+HRW 1125.0
+LRW 1110.0
+RES_PENALTY 300
+FLOODLEVEL_PENALTY 300
+RESERVOIR_GEOMETRY
+WIDTH_M 220.5
+LENGTH_M 300
+THETA 30
+BOTTOM_MASL 1100.0
+# SPILLWAY downstream_idnr C L spillway_level_masl
+SPILLWAY 5 1.5 15.0 1125.0
+FAST_OVERFLOW FALSE
+# OUTLET_HATCH downstream_idnr minQ maxQ hatch_masl
+OUTLET_HATCH 3 0.0 2.0 1102.0
+OUTLET_TUNNEL -9999
+# OUTLET_AUTO_QMIN nr_periods downstream_idnr outlet_masl
+OUTLET_AUTO_QMIN 2 5 1102.0
+01.05 30.09 0.5
+01.10 30.04 0.8
+ENDNODE
+#######################################################################################
+
+#######################################################################################
+# SKYTRONA - mountain reservoir
+NODE RESERVOIR 3 SKYTRONA
+HRW 1030.0
+LRW 970.0
+RES_PENALTY 300
+FLOODLEVEL_PENALTY 300
+RESERVOIR_GEOMETRY
+WIDTH_M 1664.5
+LENGTH_M 5000
+THETA 25
+BOTTOM_MASL 960.0
+SPILLWAY 7 2.0 40.0 1030.0
+FAST_OVERFLOW FALSE
+OUTLET_HATCH 7 0.0 5.0 970.0
+OUTLET_TUNNEL 4
+OUTLET_AUTO_QMIN -9999
+ENDNODE
+#######################################################################################
+
+#######################################################################################
+# TORDENFOSS - powerstation, SKYTRONA -> KLARVIK
+NODE PSTATION 4 TORDENFOSS
+DOWNLINK_IDNR 6
+NR_GENERATORS 2
+GENERATOR 0
+UNIFORM_NORMALIZED_CURVE 11
+0.0	0.0
+0.1	50.0
+0.2	75.0
+0.3	86.0
+0.4	90.0
+0.5	92.0
+0.6	91.5
+0.7	90.0
+0.8	88.0
+0.9	85.0
+1.0	82.0
+GENERATOR_MAX_DISCHARGE 15.0
+GENERATOR 1
+UNIFORM_NORMALIZED_CURVE 11
+0.0	0.0
+0.1	50.0
+0.2	75.0
+0.3	86.0
+0.4	90.0
+0.5	92.0
+0.6	91.5
+0.7	90.0
+0.8	88.0
+0.9	85.0
+1.0	82.0
+GENERATOR_MAX_DISCHARGE 15.0
+STATIC_GENERATOR_EFFICIENCY 0.96
+HEADLOSSCOEF 0.15
+SHARED_PENSTOCK TRUE
+POWSTAT_MASL 213.0
+POWSTAT_MIN_DISCHARGE 2.0
+POWSTAT_STARTSTOP 2.0
+LOCAL_ENERGY_EQUIVALENT 1.9448
+AUTO_QMIN -9999
+MAX_ADJUST -9999
+ENDNODE
+#######################################################################################
+
+#######################################################################################
+# DUGGBEKKEN - channel, DUGGTJERN -> KLARVIK
+NODE CHANNEL 5 DUGGBEKKEN 6
+N_CASCADE_LINRES 3
+K_TRAVELTIME_HOURS 2
+# QMIN nr_periods ; start end qmin_m3s cost_euro
+QMIN 2
+03.05 02.10 0.5 4.0
+03.10 02.05 0.8 5.0
+ENDNODE
+#######################################################################################
+
+#######################################################################################
+# KLARVIK - mid-valley reservoir
+NODE RESERVOIR 6 KLARVIK
+HRW 211.0
+LRW 195.0
+RES_PENALTY 300
+FLOODLEVEL_PENALTY 300
+RESERVOIR_GEOMETRY
+WIDTH_M 518.2
+LENGTH_M 1200
+THETA 21
+BOTTOM_MASL 190.0
+SPILLWAY 8 1.8 30.0 211.0
+FAST_OVERFLOW FALSE
+OUTLET_HATCH 8 0.0 15.0 195.0
+OUTLET_TUNNEL -9999
+OUTLET_AUTO_QMIN -9999
+ENDNODE
+#######################################################################################
+
+#######################################################################################
+# SKYRENNA
+NODE CHANNEL 7 SKYRENNA 9
+N_CASCADE_LINRES 3
+K_TRAVELTIME_HOURS 4
+QMIN -9999
+ENDNODE
+#######################################################################################
+
+#######################################################################################
+# KLARELVA
+NODE CHANNEL 8 KLARELVA 9
+N_CASCADE_LINRES 3
+K_TRAVELTIME_HOURS 3
+QMIN -9999
+ENDNODE
+#######################################################################################
+
+#######################################################################################
+# SAMLOPET - channel, confluence of KLARELVA and SKYRENNA -> TROLLDAMMEN
+NODE CHANNEL 9 SAMLOPET 14
+N_CASCADE_LINRES 3
+K_TRAVELTIME_HOURS 1
+QMIN -9999
+ENDNODE
+#######################################################################################
+
+#######################################################################################
+# SKYFONNA - mountain reservoir
+NODE RESERVOIR 10 SKYFONNA
+HRW 308.0
+LRW 288.0
+RES_PENALTY 300
+FLOODLEVEL_PENALTY 300
+RESERVOIR_GEOMETRY
+WIDTH_M 764.6
+LENGTH_M 1500
+THETA 26
+BOTTOM_MASL 283.0
+SPILLWAY 11 2.2 45.0 308.0
+FAST_OVERFLOW FALSE
+OUTLET_HATCH 11 0.0 5.0 288.0
+OUTLET_TUNNEL 13
+# OUTLET_AUTO_QMIN nr_periods downstream_idnr outlet_masl
+OUTLET_AUTO_QMIN 1 12 283.0
+01.01 31.12 0.2
+ENDNODE
+#######################################################################################
+
+#######################################################################################
+# FONNBEKKEN - SKYFONNA -> TROLLDAMMEN
+NODE CHANNEL 11 FONNBEKKEN 14
+N_CASCADE_LINRES 3
+K_TRAVELTIME_HOURS 2
+QMIN -9999
+ENDNODE
+#######################################################################################
+
+#######################################################################################
+# SALTBEKKEN - annual QMIN from SKYFONNA -> SALTVIKA
+NODE CHANNEL 12 SALTBEKKEN 16
+N_CASCADE_LINRES 3
+K_TRAVELTIME_HOURS 3
+# QMIN nr_periods ; start end qmin_m3s cost_euro
+QMIN 1
+01.01 31.12 0.2 5.0
+ENDNODE
+#######################################################################################
+
+#######################################################################################
+# HEIMFOSS - powerstation, SKYFONNA -> TROLLDAMMEN
+NODE PSTATION 13 HEIMFOSS
+DOWNLINK_IDNR 14
+NR_GENERATORS 3
+GENERATOR 0
+UNIFORM_NORMALIZED_CURVE 11
+0.0	0.0
+0.1	50.0
+0.2	75.0
+0.3	86.0
+0.4	90.0
+0.5	92.0
+0.6	91.5
+0.7	90.0
+0.8	88.0
+0.9	85.0
+1.0	82.0
+GENERATOR_MAX_DISCHARGE 5.0
+GENERATOR 1
+UNIFORM_NORMALIZED_CURVE 11
+0.0	0.0
+0.1	50.0
+0.2	75.0
+0.3	86.0
+0.4	90.0
+0.5	92.0
+0.6	91.5
+0.7	90.0
+0.8	88.0
+0.9	85.0
+1.0	82.0
+GENERATOR_MAX_DISCHARGE 5.0
+GENERATOR 2
+UNIFORM_NORMALIZED_CURVE 11
+0.0	0.0
+0.1	50.0
+0.2	75.0
+0.3	86.0
+0.4	90.0
+0.5	92.0
+0.6	91.5
+0.7	90.0
+0.8	88.0
+0.9	85.0
+1.0	82.0
+GENERATOR_MAX_DISCHARGE 5.0
+STATIC_GENERATOR_EFFICIENCY 0.96
+HEADLOSSCOEF 0.045
+SHARED_PENSTOCK TRUE
+POWSTAT_MASL 195.0
+POWSTAT_MIN_DISCHARGE 1.0
+POWSTAT_STARTSTOP 1.5
+LOCAL_ENERGY_EQUIVALENT 0.2574
+AUTO_QMIN -9999
+MAX_ADJUST -9999
+ENDNODE
+#######################################################################################
+
+#######################################################################################
+# TROLLDAMMEN - mid reservoir, target of the OPPLOFT pump
+NODE RESERVOIR 14 TROLLDAMMEN
+HRW 221.0
+LRW 196.0
+RES_PENALTY 300
+FLOODLEVEL_PENALTY 300
+RESERVOIR_GEOMETRY
+WIDTH_M 1005.5
+LENGTH_M 2500
+THETA 22
+BOTTOM_MASL 191.0
+SPILLWAY 16 2.5 60.0 221.0
+FAST_OVERFLOW FALSE
+OUTLET_HATCH -9999
+OUTLET_TUNNEL 15
+OUTLET_AUTO_QMIN -9999
+ENDNODE
+#######################################################################################
+
+#######################################################################################
+# DYPFALL - powerstation, TROLLDAMMEN -> SALTVIKA
+NODE PSTATION 15 DYPFALL
+DOWNLINK_IDNR 16
+NR_GENERATORS 2
+GENERATOR 0
+UNIFORM_NORMALIZED_CURVE 11
+0.0	0.0
+0.1	50.0
+0.2	75.0
+0.3	86.0
+0.4	90.0
+0.5	92.0
+0.6	91.5
+0.7	90.0
+0.8	88.0
+0.9	85.0
+1.0	82.0
+GENERATOR_MAX_DISCHARGE 20
+GENERATOR 1
+UNIFORM_NORMALIZED_CURVE 11
+0.0	0.0
+0.1	50.0
+0.2	75.0
+0.3	86.0
+0.4	90.0
+0.5	92.0
+0.6	91.5
+0.7	90.0
+0.8	88.0
+0.9	85.0
+1.0	82.0
+GENERATOR_MAX_DISCHARGE 20
+STATIC_GENERATOR_EFFICIENCY 0.96
+HEADLOSSCOEF 0.03
+SHARED_PENSTOCK TRUE
+POWSTAT_MASL 20.0
+POWSTAT_MIN_DISCHARGE 2.0
+POWSTAT_STARTSTOP 2.0
+LOCAL_ENERGY_EQUIVALENT 0.4683
+AUTO_QMIN -9999
+MAX_ADJUST -9999
+ENDNODE
+#######################################################################################
+
+#######################################################################################
+# SALTVIKA - lowest reservoir before the sea
+NODE RESERVOIR 16 SALTVIKA
+HRW 23.0
+LRW 13.0
+RES_PENALTY 300
+FLOODLEVEL_PENALTY 300
+RESERVOIR_GEOMETRY
+WIDTH_M 1197.75
+LENGTH_M 1800
+THETA 24
+BOTTOM_MASL 11.0
+SPILLWAY 18 3.0 80.0 23.0
+FAST_OVERFLOW FALSE
+OUTLET_HATCH 18 0.0 15.0 13.0
+OUTLET_TUNNEL 17
+# OUTLET_AUTO_QMIN nr_periods downstream_idnr outlet_masl
+OUTLET_AUTO_QMIN 2 18 11.50
+29.04 28.09 15.0 6.0
+29.09 28.04 22.0 8.0
+ENDNODE
+#######################################################################################
+
+#######################################################################################
+# TIDEVERK - powerstation, SALTVIKA -> MUNNINGEN (sea channel)
+NODE PSTATION 17 TIDEVERK
+DOWNLINK_IDNR 18
+NR_GENERATORS 2
+GENERATOR 0
+UNIFORM_NORMALIZED_CURVE 11
+0.0	0.0
+0.1	50.0
+0.2	75.0
+0.3	86.0
+0.4	90.0
+0.5	92.0
+0.6	91.5
+0.7	90.0
+0.8	88.0
+0.9	85.0
+1.0	82.0
+GENERATOR_MAX_DISCHARGE 30
+GENERATOR 1
+UNIFORM_NORMALIZED_CURVE 11
+0.0	0.0
+0.1	50.0
+0.2	75.0
+0.3	86.0
+0.4	90.0
+0.5	92.0
+0.6	91.5
+0.7	90.0
+0.8	88.0
+0.9	85.0
+1.0	82.0
+GENERATOR_MAX_DISCHARGE 30
+STATIC_GENERATOR_EFFICIENCY 0.96
+HEADLOSSCOEF 0.00025
+SHARED_PENSTOCK TRUE
+POWSTAT_MASL 2.0
+POWSTAT_MIN_DISCHARGE 5.0
+POWSTAT_STARTSTOP 3.0
+LOCAL_ENERGY_EQUIVALENT 0.0417
+AUTO_QMIN -9999
+MAX_ADJUST -9999
+ENDNODE
+#######################################################################################
+
+#######################################################################################
+# MUNNINGEN - final sea channel
+NODE CHANNEL 18 MUNNINGEN -9
+N_CASCADE_LINRES 3
+K_TRAVELTIME_HOURS 3
+# QMIN nr_periods ; start end qmin_m3s cost_euro
+QMIN 2
+01.05 30.09 15.0 6.0
+01.10 30.04 22.0 8.0
+ENDNODE
+#######################################################################################

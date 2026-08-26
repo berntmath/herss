@@ -1,0 +1,139 @@
+##########################################################################
+# TOPOLOGY FILE - mini_pump_test
+# Terje Sandø, pump-station work, July 2026
+# Generic-name test system for the new PUMP node type.
+#
+# Numbering convention (hard requirement, enforced in
+# Pump::ValidatePumpSettings): a PUMP's idnr must be strictly LOWER than
+# BOTH its PUMP_SOURCE_IDNR and PUMP_TARGET_IDNR, since Herss::Simulate()
+# is single-pass (each node Simulate()'d exactly once per t, in ascending
+# idnr order) - the pump must always run before either reservoir it
+# touches so its withdrawal/injection is visible to them later in the
+# SAME timestep. Hence pump_AB is numbered first (0), before both
+# reservoir_A (its target) and reservoir_B (its source).
+##########################################################################
+
+#######################################################################################
+# PUMP_AB - lifts water from reservoir_B (3, SOURCE) up to reservoir_A
+# (1, TARGET). Numbered first (0) so both source and target have a HIGHER
+# idnr than the pump, per the hard numbering requirement above.
+NODE PUMP 0 pump_AB
+PUMP_SOURCE_IDNR 3
+PUMP_TARGET_IDNR 1
+PUMP_INLET_MASL 61.0
+MAX_DISCHARGE 2.0
+HEADLOSSCOEF 0.05
+STATIC_MOTOR_EFFICIENCY 0.97
+PUMP_STARTSTOP 100.0
+UNIFORM_NORMALIZED_CURVE 11
+0.0	0
+0.1	40
+0.2	65
+0.3	80
+0.4	88
+0.5	92
+0.6	92
+0.7	90
+0.8	87
+0.9	83
+1.0	78
+ENDNODE
+#######################################################################################
+
+#######################################################################################
+# RESERVOIR_A - upper reservoir. This is the pump's TARGET (PUMP_TARGET_IDNR 1).
+NODE RESERVOIR 1 reservoir_A
+HRW 110.0
+LRW 90.0
+RES_PENALTY 300
+FLOODLEVEL_PENALTY 300
+# Reservoir curve points, [masl, Mm3]
+RESERVOIR_CURVE 5
+89	0.0
+90	5.0
+100	20.0
+110	40.0
+115	60.0
+# Overflow curve, points, downstream idnr [masl, m3s] - bypasses straight to elv (4)
+OVERFLOW_CURVE 3 4
+110	0.0
+112	10.0
+115	60.0
+FAST_OVERFLOW FALSE
+OUTLET_HATCH -9999
+OUTLET_TUNNEL 2
+OUTLET_AUTO_QMIN -9999
+ENDNODE
+#######################################################################################
+
+#######################################################################################
+# PSTATION_A - turbines reservoir_A's tunnel flow, tailwater goes into reservoir_B (3).
+NODE PSTATION 2 pstation_A
+DOWNLINK_IDNR 3
+NR_GENERATORS 1
+GENERATOR 0
+TURBINE_CURVE 10
+0.00	0
+0.50	50
+0.86	80
+1.14	90
+1.40	93
+1.60	93
+1.74	93
+1.84	92
+1.90	91
+2.00	88
+GENERATOR_MAX_DISCHARGE 2.0
+STATIC_GENERATOR_EFFICIENCY	0.96
+HEADLOSSCOEF	0.1
+SHARED_PENSTOCK	TRUE
+POWSTAT_MASL 70.0
+POWSTAT_MIN_DISCHARGE	0.0
+POWSTAT_STARTSTOP	0.0
+# LOCAL_ENERGY_EQUIVALENT derived the same way as in data/fabelvassdraget: head between
+# POWSTAT_MASL and Reservoir_A at 60% of its active (LRW-HRW) range.
+# masl_60 = 90 + 0.6*(110-90) = 102  ->  H = 102 - 70 = 32 m
+# e [kWh/m3] = rho*g*H*eta / 3.6e6 = 0.0027241 * 32 * 0.90 = 0.0785
+LOCAL_ENERGY_EQUIVALENT	0.0785
+AUTO_QMIN -9999
+MAX_ADJUST -9999
+ENDNODE
+#######################################################################################
+
+#######################################################################################
+# RESERVOIR_B - lower reservoir. Receives pstation_A's tailwater. This is the
+# pump's SOURCE (PUMP_SOURCE_IDNR 3). Has its own hatch onward to elv (4) so it
+# does not just fill up indefinitely.
+NODE RESERVOIR 3 reservoir_B
+HRW 75.0
+LRW 60.0
+RES_PENALTY 300
+FLOODLEVEL_PENALTY 300
+RESERVOIR_CURVE 5
+59	0.0
+60	3.0
+65	8.0
+75	15.0
+80	25.0
+OVERFLOW_CURVE 3 4
+75	0.0
+78	5.0
+80	20.0
+FAST_OVERFLOW FALSE
+# OUTLET_HATCH downstream_idnr minQ_hatch maxQ_hatch hatch_masl
+OUTLET_HATCH 4 0.0 3.0 60.0
+OUTLET_TUNNEL -9999
+OUTLET_AUTO_QMIN -9999
+ENDNODE
+#######################################################################################
+
+#######################################################################################
+# ELV - channel, outlet to sea (-9). Must keep the highest idnr in the system -
+# GlobalWaterBalance() sums the LAST node's tot_outflow as "water leaving the
+# system", so the true sea outlet always needs to be numbered last.
+NODE CHANNEL 4 elv -9
+N_CASCADE_LINRES 3
+K_TRAVELTIME_HOURS 4
+QMIN -9999
+ENDNODE
+#######################################################################################
