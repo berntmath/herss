@@ -1,0 +1,9 @@
+CHANNEL node 4 River_B
+N_CASCADE_LINRES 3
+K_TRAVELTIME_HOURS 1.00
+yyyy mm dd hh [m3/s]    [Mm3]       [m3/s]      [Euro]
+yyyy mm dd hh Up_Inflow Storage_Mm3 tot_outflow Qmin_Cost
+2026 1 1 0 0.0000 0.00000000 0.0000 0.0000 
+2026 1 1 1 0.0000 0.00000000 0.0000 0.0000 
+2026 1 1 2 0.0000 0.00000000 0.0000 0.0000 
+2026 1 1 3 0.0000 0.00000000 0.0000 0.0000 

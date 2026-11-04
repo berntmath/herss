@@ -1,0 +1,27 @@
+# Project: 		Hydraulic Economic River System Simulator (HERSS)
+# Programmer: 	Andreas, November 2026
+#               Test system for TAILWATER_IDNR. PUMP (0) pumps water from
+#               Reservoir_B (3) up to Reservoir_A (1) in time step 0, and
+#               HYDRO_POWERSTATION_A (2) releases the same water back down to
+#               Reservoir_B in time step 1. See README.md.
+
+SYSTEMNAME mini_tailwater_test
+
+# Input
+INPUTDIR ./
+ACTIONFILE actions.txt
+INFLOWFILE inflowseries.txt
+PRICEFILE pricefile.txt
+TOPOLOGYFILE topology.txt
+STARTSTATEFILE start_state.txt
+
+# Output information 
+OUTSTATEFILE outstate.txt
+WRITE_NODEFILES 1
+OUTPUTDIR ./output/
+
+# Print global system information to screen or not.
+PRINT_GLOBAL_INFO FALSE
+
+# Print economic info to screen or not. 
+PRINT_ECONOMIC_INFO FALSE
