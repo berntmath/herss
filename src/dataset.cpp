@@ -192,6 +192,14 @@ void Dataset::readActionsFile() {
             LOG_ERR("Please revisit input");
         }
 
+        // Stations with several generators can give more action columns than nodes, and
+        // action[t] was allocated with one slot per node.
+        if(active_nodes > nr_nodes) {
+            for(size_t t = 0; t < stps; t++) {
+                delete [] action[t];
+                action[t] = new double[active_nodes];
+            }
+        }
 
         // Read in the generator names for each column and save them
         for(size_t c = 0; c < active_nodes; c++) {
