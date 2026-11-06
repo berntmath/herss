@@ -1,0 +1,134 @@
+##########################################################################
+# TOPOLOGY FILE - mini_tailwater_test
+# Andreas, November 2026
+# Test system for TAILWATER_IDNR in a PSTATION node.
+#
+# PUMP (0) pumps water from Reservoir_B up to Reservoir_A, and
+# HYDRO_POWERSTATION_A (2) releases the same water from Reservoir_A back
+# down to Reservoir_B. Without TAILWATER_IDNR, HYDRO_POWERSTATION_A
+# computes Hbrutto down to POWSTAT_MASL. With TAILWATER_IDNR 3, it computes
+# Hbrutto down to the water surface elevation of Reservoir_B, as PUMP does.
+# See README.md.
+#
+# Numbering convention (hard requirement, enforced in
+# Pump::ValidatePumpSettings): a PUMP's idnr must be strictly LOWER than
+# BOTH its PUMP_SOURCE_IDNR and PUMP_TARGET_IDNR. Hence PUMP is numbered
+# first (0), before Reservoir_A (its target) and Reservoir_B (its source).
+##########################################################################
+
+#######################################################################################
+# Pump - lifts water from Reservoir_B up to Reservoir_A
+# Numbered first (0) so both source and target have a HIGHER
+# idnr than the pump, per the hard numbering requirement above.
+# NODE NODETYPE IDNR NAME
+NODE PUMP 0 PUMP
+PUMP_SOURCE_IDNR 3
+PUMP_TARGET_IDNR 1
+PUMP_INLET_MASL 499.0
+MAX_DISCHARGE 2.0
+HEADLOSSCOEF 0.0
+STATIC_MOTOR_EFFICIENCY 0.98
+PUMP_STARTSTOP 0.0
+UNIFORM_NORMALIZED_CURVE 11
+0.0	90.0
+0.1	90.0
+0.2	90.0
+0.3	90.0
+0.4	90.0
+0.5	90.0
+0.6	90.0
+0.7	90.0
+0.8	90.0
+0.9	90.0
+1.0	90.0
+ENDNODE
+#######################################################################################
+
+#######################################################################################
+# RESERVOIR_A - upper reservoir. This is the pump's Target reservoir.
+# NODE NODETYPE IDNR NAME
+NODE RESERVOIR 1 Reservoir_A
+HRW 590.0
+LRW 560.0
+RES_PENALTY 300
+FLOODLEVEL_PENALTY 300
+# Reservoir, curve points, [masl, Mm3]
+RESERVOIR_CURVE 4
+559.0	9.0
+560.0	10.0
+590.0	40.0
+591.0	41.0
+# Overflow curve, points, downstream idnr [masl, m3/s]
+OVERFLOW_CURVE 3 4
+590.0	0.0
+591.0	10.0
+592.0	60.0
+FAST_OVERFLOW FALSE
+OUTLET_HATCH -9999
+OUTLET_TUNNEL 2
+OUTLET_AUTO_QMIN -9999
+ENDNODE
+#######################################################################################
+
+#######################################################################################
+# PSTATION_A - turbines Reservoir_A's tunnel flow, tailwater goes into Reservoir_B (3).
+# NODE, NODETYPE, IDNR, NAME
+NODE PSTATION 2 HYDRO_POWERSTATION_A
+DOWNLINK_IDNR 3
+NR_GENERATORS 1
+GENERATOR 0
+TURBINE_CURVE 3
+0.0	0.1
+1.0	46.0
+2.0	92.0
+GENERATOR_MAX_DISCHARGE 2.0
+STATIC_GENERATOR_EFFICIENCY	0.98
+HEADLOSSCOEF	0.0
+SHARED_PENSTOCK	TRUE
+POWSTAT_MASL 500.0
+# TAILWATER_IDNR -9 gives the old behaviour (Hbrutto down to POWSTAT_MASL)
+TAILWATER_IDNR 3
+POWSTAT_MIN_DISCHARGE	0.0
+POWSTAT_STARTSTOP	0.0
+LOCAL_ENERGY_EQUIVALENT	0.1000
+AUTO_QMIN -9999
+MAX_ADJUST -9999
+ENDNODE
+#######################################################################################
+
+#######################################################################################
+# RESERVOIR_B - lower reservoir. Receives HYDRO_POWERSTATION_A's tailwater. This is the pump's Source.
+# NODE, NODETYPE, IDNR, NAME
+NODE RESERVOIR 3 Reservoir_B
+HRW 540.0
+LRW 500.0
+RES_PENALTY 300
+FLOODLEVEL_PENALTY 300
+# Reservoir, curve points, [masl, Mm3]
+RESERVOIR_CURVE 4
+499.0	9.0
+500.0	10.0
+540.0	50.0
+541.0	51.0
+# Overflow curve, points, downstream idnr [masl, m3/s]
+OVERFLOW_CURVE 3 4
+540.0	0.0
+541.0	10.0
+542.0	60.0
+FAST_OVERFLOW FALSE
+# OUTLET_HATCH downstream_idnr minQ_hatch maxQ_hatch hatch_masl
+OUTLET_HATCH 4 0.0 2.0 500.0
+OUTLET_TUNNEL -9999
+OUTLET_AUTO_QMIN -9999
+ENDNODE
+#######################################################################################
+
+#######################################################################################
+# River - channel, receives the hatch flow and overflow, outlet to sea (-9).
+# NODE, NODETYPE, IDNR, NAME, DOWNSTREAM_NODE_IDNR
+NODE CHANNEL 4 River_B -9
+N_CASCADE_LINRES 3
+K_TRAVELTIME_HOURS 1
+QMIN -9999
+ENDNODE
+#######################################################################################

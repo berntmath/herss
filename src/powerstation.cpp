@@ -22,8 +22,13 @@ Powerstation::Powerstation(){
     init_Power              = -1.0 * NOT_INIT;
     aggressive_actions_cost = -1.0 * NOT_INIT;
     shared_penstock         = false;   
-    nr_generators           = 0;       
-    
+    nr_generators           = 0;
+    tailwater_idnr          = NOT_INIT;
+    tailwater_in_use        = false;
+    tailwater_final_pass    = false;
+    tw_start_masl           = NOT_INIT;
+    tw_end_masl             = NOT_INIT;
+
 }
 
 Powerstation::~Powerstation(){}
@@ -164,8 +169,15 @@ int Powerstation::Simulate(size_t t) {
             + " for node " + std::to_string(int(idnr)) + " (" + nodename + ")\n");
     }
     
-    Hbrutto  = ((this->start_of_stp_masl + this->end_of_stp_masl)/2.0 ) - this->powstat_masl;
-    
+    // With TAILWATER_IDNR the head is measured down to the tailwater reservoir's
+    // averaged surface. Its end level is only known after all nodes have run, so the value from
+    // the first call is provisional and is overwritten by the re-run in Herss::Simulate().
+    double tailwater_masl = this->powstat_masl;
+    if (tailwater_in_use && tailwater_final_pass) {
+        tailwater_masl = (this->tw_start_masl + this->tw_end_masl) / 2.0;
+    }
+    Hbrutto  = ((this->start_of_stp_masl + this->end_of_stp_masl)/2.0 ) - tailwater_masl;
+
     // CHANGES BY OVE: Handle both shared and separate penstock configurations
     // SHARED PENSTOCK: All generators share the same penstock, head loss based on combined flow
     // BVM June 2026, modified for several type of efficiency curves. 
@@ -279,7 +291,8 @@ int Powerstation::Simulate(size_t t) {
 
     
     // We do allow for a powerstation to be the most downstream node in the riversystem. 
-    if(this->ptr_downstream_node != NULL) {
+    // The re-run for tailwater tracking must not route the same water downstream a second time.
+    if(this->ptr_downstream_node != NULL && !tailwater_final_pass) {
         this->ptr_downstream_node->S->up_inflow[t] += total_Q;
     }
 
@@ -411,6 +424,15 @@ int Powerstation::ReadNodeData(string filename) {
                     // POWSTAT_MASL 218.0
                     if(keyword2.compare("POWSTAT_MASL") == 0 ) {
                         this->powstat_masl = atof(value2.c_str());
+                    }
+
+                    // TAILWATER_IDNR 3   (optional)
+                    if(keyword2.compare("TAILWATER_IDNR") == 0 ) {
+                        int tmp_tw = atoi(value2.c_str());
+                        if(tmp_tw >= 0) {
+                            this->tailwater_idnr   = size_t(tmp_tw);
+                            this->tailwater_in_use = true;
+                        }
                     }
 
                     // POWSTAT_MIN_DISCHARGE 0.0

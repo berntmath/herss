@@ -170,6 +170,7 @@ class Channel;
 class SystemState;
 class Herss;
 class Pump;
+class Powerstation;
 
 class CascadedReservoirs;
 
@@ -691,6 +692,8 @@ class Reservoir: public Node {
     // Reverse mapping: pumps using this reservoir as source or target (for averaged-head computation).
     std::vector<Pump*> ptr_pumps_as_source;
     std::vector<Pump*> ptr_pumps_as_target;
+    // Reverse mapping: powerstations using this reservoir's surface as their tailwater (TAILWATER_IDNR).
+    std::vector<Powerstation*> ptr_stations_as_tailwater;
 
     ArrayCurve ac_res_masl_2_Mm3;
     ArrayCurve ac_res_Mm3_2_masl;
@@ -801,6 +804,14 @@ class Powerstation: public Node {
     // Since we do not allow this, and we override the action.
     // We give a marginal penalty so that we see a change in the VF.
     double aggressive_actions_cost;
+
+    // Optional tailwater tracking (TAILWATER_IDNR). When not in use the head is
+    // measured down to the fixed powstat_masl, exactly as before.
+    size_t tailwater_idnr;
+    bool tailwater_in_use;
+    bool tailwater_final_pass;  // true only during the end-of-timestep re-run in Herss::Simulate()
+    double tw_start_masl;       // pushed by the tailwater reservoir, same convention as Pump
+    double tw_end_masl;
 
     int ReadNodeData(string filename);
     int ReadStateFile(string filename);

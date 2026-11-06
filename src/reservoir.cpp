@@ -505,6 +505,7 @@ int Reservoir::Simulate(size_t t) {
     // Store the start level for connected pumps for later use in pump power calculations.
     for(Pump* p : ptr_pumps_as_source) { p->src_start_masl = this->res_masl; }
     for(Pump* p : ptr_pumps_as_target) { p->tgt_start_masl = this->res_masl; }
+    for(Powerstation* ps : ptr_stations_as_tailwater) { ps->tw_start_masl = this->res_masl; }
 
 
     tunnelflow_Mm3 = 0.0;
@@ -714,6 +715,7 @@ int Reservoir::Simulate(size_t t) {
     // Store the end level for connected pumps.
     for(Pump* p : ptr_pumps_as_source) { p->src_end_masl = this->res_masl; }
     for(Pump* p : ptr_pumps_as_target) { p->tgt_end_masl = this->res_masl; }
+    for(Powerstation* ps : ptr_stations_as_tailwater) { ps->tw_end_masl = this->res_masl; }
 
     // Fractional_filling
     double fract_filling = (res_Mm3  - filling_at_lrw_Mm3) / (filling_at_hrw_Mm3 - filling_at_lrw_Mm3);
