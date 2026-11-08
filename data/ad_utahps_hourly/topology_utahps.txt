@@ -1,0 +1,214 @@
+##########################################################################
+# TOPOLOGY FILE Upper Tovdalen Hydro Power System (uTAHPS)
+# BVM 20 Oct, 2026
+# 
+##########################################################################
+NODE RESERVOIR 0 HJELLE
+HRW 757.0
+LRW 748.0
+RES_PENALTY 300
+FLOODLEVEL_PENALTY 300
+RESERVOIR_GEOMETRY
+WIDTH_M 1000
+LENGTH_M 1000
+THETA 20
+BOTTOM_MASL 745.0
+# SPILLWAY  downstream_idnr  C  L  spillway_level_masl
+SPILLWAY 2 2.1 50.0 757.0
+FAST_OVERFLOW FALSE
+OUTLET_HATCH -9999
+OUTLET_TUNNEL 1
+OUTLET_AUTO_QMIN -9999
+ENDNODE
+##########################################################################
+NODE PSTATION 1 SVOLETJONN
+DOWNLINK_IDNR 2
+NR_GENERATORS 1
+GENERATOR 0
+QUADRATIC_EFF_EQUATION -1.610031 2.478652 0.000273
+GENERATOR_MAX_DISCHARGE 10.0
+STATIC_GENERATOR_EFFICIENCY	0.96
+HEADLOSSCOEF	0.03
+SHARED_PENSTOCK	TRUE
+POWSTAT_MASL 690.0
+POWSTAT_MIN_DISCHARGE	1.0
+POWSTAT_STARTSTOP	2.0
+LOCAL_ENERGY_EQUIVALENT	0.11
+AUTO_QMIN -9999
+MAX_ADJUST -9999
+ENDNODE
+
+
+# Routing as a cascade of linear reservoirs (the only method with an adjoint in HERSS-AD).
+# Replaces N_REACHES 3 / REFERENCE_TRAVEL_TIME 8.2 / NONLINEAR_COEFFICIENT 1.2.
+NODE CHANNEL 2 VANAROSEN 5
+N_CASCADE_LINRES 3
+K_TRAVELTIME_HOURS 8.2
+QMIN -9999
+ENDNODE
+
+########################################
+NODE RESERVOIR 3 GRESSE
+HRW 749.0
+LRW 740.0
+RES_PENALTY 300
+# Reservoir geometry (replaces RESERVOIR_CURVE). Trapezoid cross-section, volume = LENGTH_M * (WIDTH_M * h + h^2 / tan(THETA)) / 1e6,
+# with h = masl - BOTTOM_MASL. Fitted to the old curve between 725 and 750 masl.
+RESERVOIR_GEOMETRY
+WIDTH_M 1161
+LENGTH_M 4000
+# Angle of the sides of the reservoir, in degrees. 0 < THETA < 90, close to zero is a very flat valley.
+THETA 5
+BOTTOM_MASL 720.7
+# SPILLWAY  downstream_idnr  C  L  spillway_level_masl   (replaces OVERFLOW_CURVE 3 4)
+SPILLWAY 4 2.1 18.0 749.0
+FAST_OVERFLOW FALSE
+# Outlet hatch downstream_nodeid, qmin_hatch, qmax_hatch, hatch_masl
+OUTLET_HATCH -9999
+OUTLET_TUNNEL 7
+OUTLET_AUTO_QMIN -9999
+ENDNODE
+#######################################################################################
+
+
+########################################################################################
+# Replaces N_REACHES 2 / REFERENCE_TRAVEL_TIME 5.2 / NONLINEAR_COEFFICIENT 1.2.
+NODE CHANNEL 4 GRONANI 5
+N_CASCADE_LINRES 2
+K_TRAVELTIME_HOURS 5.2
+QMIN -9999
+ENDNODE
+########################################################################################
+
+
+NODE RESERVOIR 5 TOPPSY
+HRW 650.00
+LRW 620.00
+RES_PENALTY 300
+# Reservoir geometry (replaces RESERVOIR_CURVE). Trapezoid cross-section, volume = LENGTH_M * (WIDTH_M * h + h^2 / tan(THETA)) / 1e6,
+# with h = masl - BOTTOM_MASL. Fitted to the old curve between 619 and 650 masl.
+RESERVOIR_GEOMETRY
+WIDTH_M 309
+LENGTH_M 10000
+# Angle of the sides of the reservoir, in degrees. 0 < THETA < 90, close to zero is a very flat valley.
+THETA 58
+BOTTOM_MASL 544.6
+# SPILLWAY  downstream_idnr  C  L  spillway_level_masl   (replaces OVERFLOW_CURVE 3 8)
+SPILLWAY 8 2.1 1.0 650.0
+FAST_OVERFLOW FALSE
+# Outlet hatch downstream_nodeid, qmin_hatch, qmax_hatch, hatch_masl
+OUTLET_HATCH -9999
+OUTLET_TUNNEL 6
+OUTLET_AUTO_QMIN -9999
+ENDNODE
+
+
+#########################################################################################
+NODE PSTATION 6 SVEIGSHYL_I
+DOWNLINK_IDNR 8
+# Efficiency as a quadratic of the normalised discharge Qn = Q / GENERATOR_MAX_DISCHARGE (efficiency as a fraction, not %).
+# Least-squares fit to the old TURBINE_CURVE:  eta = a*Qn^2 + b*Qn + c
+NR_GENERATORS 1
+GENERATOR 0
+QUADRATIC_EFF_EQUATION -1.5768 2.4526 0.0014
+GENERATOR_MAX_DISCHARGE 5.9
+STATIC_GENERATOR_EFFICIENCY 0.96
+HEADLOSSCOEF 0.2
+POWSTAT_MASL 581.0
+POWSTAT_MIN_DISCHARGE 0.0
+POWSTAT_MAX_DISCHARGE 5.9
+POWSTAT_STARTSTOP 2.0
+LOCAL_ENERGY_EQUIVALENT 0.11
+AUTO_QMIN -9999
+MAX_ADJUST -9999
+ENDNODE
+#########################################################################################
+
+
+#########################################################################################
+# SVEIGSHYL_II POWERSTATION GRESSE IS INTAKE 
+NODE PSTATION 7 SVEIGSHYL_II
+DOWNLINK_IDNR 8
+# Efficiency as a quadratic of Qn = Q / GENERATOR_MAX_DISCHARGE (fraction, not %), eta = a*Qn^2 + b*Qn + c.
+# Weighted fit to the old TURBINE_CURVE: good above Qn = 0.5, poor at low load.
+NR_GENERATORS 1
+GENERATOR 0
+QUADRATIC_EFF_EQUATION -0.4037 0.5752 0.7101
+GENERATOR_MAX_DISCHARGE 6.0
+STATIC_GENERATOR_EFFICIENCY 0.96
+HEADLOSSCOEF 0.145
+POWSTAT_MASL 581.0
+POWSTAT_MIN_DISCHARGE 0.6
+POWSTAT_MAX_DISCHARGE 6.0
+POWSTAT_STARTSTOP 2.0
+LOCAL_ENERGY_EQUIVALENT 0.39
+AUTO_QMIN -9999
+MAX_ADJUST -9999
+ENDNODE
+#########################################################################################
+
+########################################################################################
+# NODE NODETYPE IDNR NAME DOWNSTREAM_NODE_IDNR
+NODE CHANNEL 8 DALSANA 9
+N_CASCADE_LINRES 3
+K_TRAVELTIME_HOURS 6
+QMIN -9999
+ENDNODE
+########################################################################################
+
+
+##########################################################################
+# KROKNESVATN RESERVOIR
+# NODE NODETYPE(RESERVOIR/PSTATION/CHANNEL) IDNR NAME
+NODE RESERVOIR 9 KROKNESVATN
+HRW 433.00
+LRW 333.00
+RES_PENALTY 300
+# Reservoir geometry (replaces RESERVOIR_CURVE). Trapezoid cross-section, volume = LENGTH_M * (WIDTH_M * h + h^2 / tan(THETA)) / 1e6,
+# with h = masl - BOTTOM_MASL. Fitted to the old curve between 333 and 433 masl (max error 0.25 Mm3).
+RESERVOIR_GEOMETRY
+WIDTH_M 132
+LENGTH_M 5000
+# Angle of the sides of the reservoir, in degrees. 0 < THETA < 90, close to zero is a very flat valley.
+THETA 28.6
+BOTTOM_MASL 310.5
+# SPILLWAY  downstream_idnr  C  L  spillway_level_masl   (replaces OVERFLOW_CURVE 4 11)
+SPILLWAY 11 2.1 45.0 433.0
+FAST_OVERFLOW FALSE
+# Outlet hatch downstream_nodeid, qmin_hatch, qmax_hatch, hatch_masl
+OUTLET_HATCH -9999
+OUTLET_TUNNEL 10
+OUTLET_AUTO_QMIN -9999
+ENDNODE
+#########################################################################################
+
+#########################################################################################
+# AUSTENA POWERSTATION KROKNESVATN IS INTAKE
+NODE PSTATION 10 EASTER
+DOWNLINK_IDNR 11
+NR_GENERATORS 1
+GENERATOR 0
+# Efficiency as a quadratic of Qn = Q / GENERATOR_MAX_DISCHARGE (fraction, not %), eta = a*Qn^2 + b*Qn + c.
+# The old TURBINE_CURVE has the same normalised shape as SVEIGSHYL_I, so the same fit is used.
+QUADRATIC_EFF_EQUATION -1.5768 2.4526 0.0014
+GENERATOR_MAX_DISCHARGE 9.80
+STATIC_GENERATOR_EFFICIENCY 0.96
+HEADLOSSCOEF 0.145
+POWSTAT_MASL 218.0
+POWSTAT_MIN_DISCHARGE 0.0
+POWSTAT_MAX_DISCHARGE 9.8
+POWSTAT_STARTSTOP 2.0
+LOCAL_ENERGY_EQUIVALENT 0.11
+AUTO_QMIN -9999
+MAX_ADJUST -9999
+ENDNODE
+#########################################################################################
+
+########################################################################################
+# NODE NODETYPE IDNR NAME DOWNSTREAM_NODE_IDNR
+NODE CHANNEL 11 HYNNEKLEIV -9
+N_CASCADE_LINRES 2
+K_TRAVELTIME_HOURS 4
+QMIN -9999
+ENDNODE
+########################################################################################

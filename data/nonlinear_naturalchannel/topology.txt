@@ -1,0 +1,44 @@
+##########################################################################
+# TOPOLOGY FILE CHannel_Tests
+# Sep 2026
+##########################################################################
+
+#######################################################################################
+# 
+# NODE NODETYPE(RESERVOIR/PSTATION/CHANNEL) IDNR NAME
+NODE RESERVOIR 0 RES_A
+HRW 633
+LRW 630
+RES_PENALTY 300
+FLOODLEVEL_PENALTY 300
+# Reservoir geometry (trapesform)
+RESERVOIR_GEOMETRY
+WIDTH_M 1517.808
+LENGTH_M 4500.877
+THETA 65
+BOTTOM_MASL 624.406
+# SPILLWAY, downstream_idnr, C, L, spillway_level_masl
+SPILLWAY 1 3 20 633
+FAST_OVERFLOW FALSE
+# Outlet hatch downstream_nodeid, qmin_hatch, qmax_hatch, hatch_masl
+OUTLET_HATCH 1 0 10 625.0
+OUTLET_TUNNEL -9999
+OUTLET_AUTO_QMIN -9999
+ENDNODE
+#######################################################################################
+
+########################################################################################
+# NODE NODETYPE IDNR NAME DOWNSTREAM_NODE_IDNR
+# Testing the nonlinear natural channel routing method. 
+NODE CHANNEL 1 CHANNEL_1 -9
+N_REACHES 8
+REFERENCE_FLOW 2.1
+REFERENCE_TRAVEL_TIME 18.2
+NONLINEAR_COEFFICIENT 1.3
+QMIN -9999
+ENDNODE
+########################################################################################
+
+
+
+

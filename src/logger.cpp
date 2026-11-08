@@ -18,6 +18,8 @@ static std::string nowAsText() {
 }
 
 void Logger::log(LogLevel level, const std::string& text, const char* file, int line, const char* func) {
+    if (quiet_ && level != LogLevel::Error) return;
+
     std::lock_guard<std::mutex> lock(mtx_);
 
     const char* lvl = "MSG";

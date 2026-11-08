@@ -2,33 +2,34 @@ Riversystem uTAHPS
 Node Idnr Nodename          Nodetype int Nodetypename Remaining_Mm3
 Node  0 HJELLE               Nodetype 0  RESERVOIR             3.2569 
 Node  1 SVOLETJONN           Nodetype 1  PSTATION              0.0000 
-Node  2 VANAROSEN            Nodetype 2  CHANNEL               0.0461 
+Node  2 VANAROSEN            Nodetype 2  CHANNEL               0.0691 
 Node  3 GRESSE               Nodetype 0  RESERVOIR             122.3394 
 Node  4 GRONANI              Nodetype 2  CHANNEL               0.0000 
-Node  5 TOPPSY               Nodetype 0  RESERVOIR             396.1341 
+Node  5 TOPPSY               Nodetype 0  RESERVOIR             396.1329 
 Node  6 SVEIGSHYL_I          Nodetype 1  PSTATION              0.0000 
 Node  7 SVEIGSHYL_II         Nodetype 1  PSTATION              0.0000 
-Node  8 DALSANA              Nodetype 2  CHANNEL               0.2157 
-Node  9 KROKNESVATN          Nodetype 0  RESERVOIR             246.0221 
+Node  8 DALSANA              Nodetype 2  CHANNEL               0.2156 
+Node  9 KROKNESVATN          Nodetype 0  RESERVOIR             246.0245 
 Node 10 EASTER               Nodetype 1  PSTATION              0.0000 
 Node 11 HYNNEKLEIV           Nodetype 2  CHANNEL               0.2121 
 -------------------------------------------
 GLOBAL WATERBALANCE
-start_water_Mm3   = 696.399200
+start_water_Mm3   = 696.496200
 inflow_volume_Mm3 = 386.085312
-outflow_Mm3       = 314.258206
-end_water_Mm3     = 768.226306
+outflow_Mm3       = 314.330997
+end_water_Mm3     = 768.250515
 waterbalance      = 0.000000
 Note that there might be dead water below LRW in the system
 -------------------------------------------
 Average_price_Euro           = 137.878
 RestPrice_Euro               = 101.000
-tot_remaining_Mm3            = 768.226
+tot_remaining_Mm3            = 768.251
 tot_active_remaining_Mm3     = 343.906
 tot_remaining_MWh            = 58394.966
 tot_remaining_Euro           = 5897891.536
-Sum_Production_MWh           = 129576.009
-tot_income_Euro              = 20530872.284
+Sum_Production_MWh           = 129577.879
+Sum_Pump_Consumption_MWh     = 0.000
+tot_income_Euro              = 20531244.043
 Avg_achieved_price_E_MWh     = 158.447
 sum_qmin_cost_Euro           = 0.000
 sum_lrw_cost_Euro            = 0.000
@@ -36,5 +37,5 @@ sum_startstopcost_Euro       = 22.000
 sum_max_adjustment_cost      = 0.000
 sum_aggressive_actions_cost  = 0.000
 tot_cost_Euro                = 22.000
-tot_profit_Euro              = 20530850.284
-valuefunction_Euro           = 26428741.819
+tot_profit_Euro              = 20531222.043
+valuefunction_Euro           = 26429113.578

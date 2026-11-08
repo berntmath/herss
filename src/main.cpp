@@ -12,6 +12,8 @@ BVM May 20206
 
 #include "herss.h"
 #include "logger.h"
+#include "outputformats.h"
+#include "optimizer.h"
 
 #include <stdio.h>
 #include <sys/time.h>
@@ -71,41 +73,52 @@ int main(int argc, char *argv[]) {
     LOG_MSG("VERSION_DATE: " + VERSION_DATE);
 
     gc->globalfile     = string(argv[1]);
-    
     gc->readGlobalFile();
-    gc->SetDirectoriesAndFilenames();
-    gc->Diagnose();  // Reads topology file into parser 
 
+    gc->SetDirectoriesAndFilenames();
+
+    gc->Diagnose();  // Reads topology file into parser 
     gc->checkNrSteps();  // This can be voided if you want to set stps manually before allocation of objects
 
     if(gc->printglobalinfo) {
         gc->printGlobalInfo();
     }
 
-    // gc->printGlobalInfo();
-
-
     Dataset *data;
     data = new Dataset(gc);
     data->readAllData(); 
 
+
     Herss *herss;
     herss = new Herss(gc);
 
+    // Preps Sim, also ReadNodeData(gc->topologyfile);
     herss->prepaireSimulation(data);
-
 
     // Check that basic variables are initialized and sett within aceptable limits. 
     herss->rs->DiagnoseRiversystemConfiguration();
 
     LOG_MSG("Initialisation looks good. Starting simulation..... ");
+
+    // ADAM_OPTIMIZER TRUE in the global file: optimize the generator and/or hatch actions first (HERSS-AD).
+    // The run below then uses the optimized actions.
+    if(gc->adam_optimizer) {
+        RunAdamOptimization(herss, gc);
+    }
+
     herss->Simulate();
     herss->CheckWaterBalance();
     herss->GlobalWaterBalance();
-    
     herss->CalcAdjustmenCosts();
+    
+    double vf = herss->rs->CalcVF(data->restprice);
+    printf("vf = %f\n", vf);
+    
 
-    herss->rs->CalcVF(data->restprice);
+    if(gc->use_autodiff) {
+        herss->rs->Backward(herss);
+        herss->rs->WriteGradients();
+    }
 
     if(gc->printeconomicinfo) {
         herss->rs->PrintEconomicInfo(herss);
@@ -113,17 +126,20 @@ int main(int argc, char *argv[]) {
 
     //herss->rs->PrintReservoirData2Screen();
     herss->rs->CalcSimulationProfit();
-    //herss->PrintAllInput(); Uncomment to print all input data
-
+    // herss->PrintAllInput(); 
+            
     // Now we need to write output to files
-    herss->rs->WriteRiverSystemData(data->restprice);
+    herss->rs->WriteRiverSystemData();
     herss->rs->WriteReservoirData();
-    herss->WriteStateFile();
+    
 
+    herss->WriteStateFile();
 
     if(gc->write_nodefiles) {
         herss->WriteNodeOutput();
     }  
+
+    WriteOutputFormats(herss);
 
 
     delete herss;

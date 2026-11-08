@@ -120,17 +120,6 @@ double ArrayCurve::initializeArrays() {
 
 double ArrayCurve::x2y(double x) {
 
-
-    //cout << "Input x = " << x << "\n";
-    //cout << "xmin = " << xmin << ", xmax = " << xmax << "\n";
-
-    //printf("x_points and y_points:\n");
-
-    //for(int i = 0; i < nr_pts; i++) {
-    //    printf("  [%d] x_points[%d]=%.5f  y_points[%d]=%.5f\n", i, i, x_points[i], i, y_points[i]);
-    //}
-
-
     // We need to assume that there is a little difference between xmin, and xmax.
     double xdiff = abs(xmax - xmin);
     if(xdiff < 0.0001) {
@@ -214,7 +203,6 @@ double ArrayCurve::x2y(double x) {
             printf("  [%d] x_points[%d]=%.5f  y_points[%d]=%.5f\n", i, i, x_points[i], i, y_points[i]);
         }
     }
-
 
 
     return y;

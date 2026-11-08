@@ -1,0 +1,31 @@
+Riversystem CHannelTest
+Node Idnr Nodename          Nodetype int Nodetypename Remaining_Mm3
+Node  0 RES_A                Nodetype 0  RESERVOIR             45.1732 
+Node  1 CHANNEL_1            Nodetype 2  CHANNEL               0.1440 
+-------------------------------------------
+GLOBAL WATERBALANCE
+start_water_Mm3   = 45.230762
+inflow_volume_Mm3 = 3.891600
+outflow_Mm3       = 3.805200
+end_water_Mm3     = 45.317162
+waterbalance      = 0.000000
+Note that there might be dead water below LRW in the system
+-------------------------------------------
+Average_price_Euro           = 428.160
+RestPrice_Euro               = 203.000
+tot_remaining_Mm3            = 45.317
+tot_active_remaining_Mm3     = 6.892
+tot_remaining_MWh            = 0.000
+tot_remaining_Euro           = 0.000
+Sum_Production_MWh           = 0.000
+Sum_Pump_Consumption_MWh     = 0.000
+tot_income_Euro              = 0.000
+Avg_achieved_price_E_MWh     = 203.000
+sum_qmin_cost_Euro           = 0.000
+sum_lrw_cost_Euro            = 0.000
+sum_startstopcost_Euro       = 0.000
+sum_max_adjustment_cost      = 0.000
+sum_aggressive_actions_cost  = 0.000
+tot_cost_Euro                = 0.000
+tot_profit_Euro              = 0.000
+valuefunction_Euro           = 0.000

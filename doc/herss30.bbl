@@ -1,0 +1,54 @@
+\begin{thebibliography}{7}
+\providecommand{\natexlab}[1]{#1}
+\providecommand{\url}[1]{\texttt{#1}}
+\expandafter\ifx\csname urlstyle\endcsname\relax
+  \providecommand{\doi}[1]{doi: #1}\else
+  \providecommand{\doi}{doi: \begingroup \urlstyle{rm}\Url}\fi
+
+\bibitem[Chow et~al.(1988)Chow, Maidment, and Mays]{chow88}
+V.T. Chow, D.~R. Maidment, and L.~W. Mays.
+\newblock \emph{Applied Hydrology, Chapter 7}.
+\newblock McGraw-Hill, 1 edition, 1988.
+
+\bibitem[Dooge(1959)]{Dooge1959}
+J.~C.~I. Dooge.
+\newblock A general theory of the unit hydrograph.
+\newblock \emph{Journal of Geophysical Research}, 64\penalty0 (2):\penalty0
+  241--256, 1959.
+
+\bibitem[Maidment(1993)]{maidment1993}
+D.R. Maidment.
+\newblock \emph{Handbook of hydrology}.
+\newblock McGraw-Hill, 1 edition, 1993.
+
+\bibitem[{Mateo Lázaro} et~al.(2015){Mateo Lázaro}, Ángel {Sánchez
+  Navarro}, {García Gil}, and {Edo Romero}]{MATEO2015}
+Jesús {Mateo Lázaro}, José Ángel {Sánchez Navarro}, Alejandro {García
+  Gil}, and Vanesa {Edo Romero}.
+\newblock A new adaptation of linear reservoir models in parallel sets to
+  assess actual hydrological events.
+\newblock \emph{Journal of Hydrology}, 524:\penalty0 507--521, 2015.
+\newblock ISSN 0022-1694.
+\newblock \doi{https://doi.org/10.1016/j.jhydrol.2015.03.009}.
+\newblock URL
+  \url{https://www.sciencedirect.com/science/article/pii/S0022169415001808}.
+
+\bibitem[McCarthy(1938)]{maccarthy1938}
+G.T. McCarthy.
+\newblock \emph{The unit hydrograph and flood routing}.
+\newblock Conference of North Atlantic Division, U.S. Army Corps of Engineers,
+  1938.
+
+\bibitem[Nash(1957)]{Nash1957}
+J.~E. Nash.
+\newblock The form of the instantaneous unit hydrograph.
+\newblock \emph{International Association of Scientific Hydrology Publication},
+  45:\penalty0 114--121, 1957.
+
+\bibitem[Zoch(1934)]{Zoch1934}
+R.~T. Zoch.
+\newblock On the relation between rainfall and streamflow.
+\newblock \emph{Monthly Weather Review}, 62\penalty0 (9):\penalty0 315--322,
+  1934.
+
+\end{thebibliography}

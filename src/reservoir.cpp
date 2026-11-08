@@ -39,6 +39,7 @@ Reservoir::Reservoir(){
     res_HRW                        = NOT_INIT;
     filling_at_hrw_Mm3             = NOT_INIT;
     filling_at_hatchlevel          = NOT_INIT;
+    filling_at_spillway_Mm3        = NOT_INIT;
 
     res_LRW                        = NOT_INIT;
     filling_at_lrw_Mm3             = NOT_INIT;
@@ -74,6 +75,11 @@ Reservoir::Reservoir(){
     maxQ_hatch                     = NOT_INIT;
     hatch_masl                     = NOT_INIT;
     res_penalty                    = -1.0*NOT_INIT;
+    filling_f0                     = 0.0;
+    filling_penalty                = 0.0;
+    cost_filling                   = 0.0;
+    hatch_adjustment_cost          = 0.0;
+    cost_hatch_adjust              = 0.0;
     floodlevel_cost                = -1.0*NOT_INIT;
 
     fast_overflow = false; 
@@ -91,6 +97,7 @@ Reservoir::Reservoir(){
     ptr_downstream_node_overflow   = NULL; 
     ptr_downstream_node_auto_qmin  = NULL;
 
+    res_Mm3_init_grad              = 0.0;
 
 }
 //----------------------------------------------------------------------------------
@@ -143,8 +150,6 @@ int Reservoir::initArrayCurves(void) {
         ac_ovefl_m3s_2_masl.initializeArrays();
     }
 
-
-
     return 0;
 }
 ////////////////////////////////////////////////////////////////
@@ -158,13 +163,16 @@ double Reservoir::CalcOverflow() {
 
     overflow_m3s = 0.0;
     overflow_Mm3 = 0.0;
-    
+
+    // Added this to void warning - have not checked that it is correct.
+    masl_start_overflow = this->res_HRW;
+
+
     if(this->use_overflow_curve) {
         masl_start_overflow = this->ovefl_curve_masl[0];  
     } else if(this->use_spillway) {
         masl_start_overflow = this->spillway_level_masl;
     }
-
 
     // CHANGE BY OVE: Fast overflow calculation
     if (fast_overflow) {
@@ -230,37 +238,21 @@ double Reservoir::CalcOverflow() {
             }
         } else if(this->use_spillway) {
 
-            if(this->res_masl > spillway_level_masl) {
+            // SMOOTH
+            // BVM 14 oct 2026.
+            // FOund some numerical issues. Outflow can be larger than inflow when reservoir is full. 
+            // This is because I am using hte head after I have added water.
+            // Using average filling to calculate the head for the spillway.
+            double head_m = relu_hi((this->res_masl + spillway_level_masl) / 2.0 - spillway_level_masl, EPS_M);
 
-                double head_m = this->res_masl - spillway_level_masl;
-                overflow_m3s = spillway_C * spillway_L * head_m * sqrt(head_m);
-                overflow_Mm3 = MACRO_m3s_2_Mm3(overflow_m3s,S->dt);
+            overflow_m3s = spillway_C * spillway_L * head_m * sqrt(head_m);
+            overflow_Mm3 = MACRO_m3s_2_Mm3(overflow_m3s,S->dt);
 
-                // We can have situations where the spillway is set lower than HRW.
-                // We need to check water availability, this goes essentialy all the way down to the bottom of the reservoir
-                double filling_at_spillway_Mm3 = calcResVolume(spillway_level_masl);
-                current_filling  = this->res_Mm3;
-                max_overflow = current_filling - filling_at_spillway_Mm3;
+            // We can have situations where the spillway is set lower than HRW.
+            // Only water above the spillway crest can leave, this goes essentialy all the way down to the bottom of the reservoir
+            double available_Mm3 = relu_lo(this->res_Mm3 - filling_at_spillway_Mm3, EPS_MM3);
 
-                if(overflow_Mm3 > max_overflow){
-                    overflow_Mm3 = max_overflow;
-                }
-
-                if(overflow_Mm3 < 0.0) {
-                    LOG_WARN("Negative overflow is not allowed \n");
-                    LOG_WARN("current_filling  = " + std::to_string(this->res_Mm3)); 
-                    LOG_WARN("filling_at_hrw_Mm3 = " + std::to_string(filling_at_hrw_Mm3));
-                    LOG_WARN("spillway_level_masl= " + std::to_string(spillway_level_masl));
-                    LOG_WARN("overflow_Mm3 = " + std::to_string(overflow_Mm3));
-                    LOG_WARN("res_masl= " + std::to_string(this->res_masl));
-                    LOG_WARN("spillway_level_masl = " + std::to_string(spillway_level_masl));
-                    LOG_ERR("Node idnr = " + std::to_string(int(this->idnr)) + "   nodename = " + this->nodename );
-                }
-                return overflow_Mm3;
-            } else {
-                return 0.0;
-            }
-
+            return smin_nn(overflow_Mm3, available_Mm3, EPS_REL_FLOW);
 
         } else {
             LOG_ERR("ERROR: No method for calculating overflow is specified. Node idnr = " + std::to_string(int(this->idnr)) + "   nodename = " + this->nodename );
@@ -335,6 +327,10 @@ void Reservoir::InitReservoir(void) {
         if(outlet_hatch_in_use) {
             filling_at_hatchlevel = ac_res_masl_2_Mm3.x2y(this->hatch_masl);
         }
+
+        if(use_spillway) {
+            filling_at_spillway_Mm3 = ac_res_masl_2_Mm3.x2y(this->spillway_level_masl);
+        }
     }
 
 
@@ -365,6 +361,10 @@ void Reservoir::InitReservoir(void) {
         // Calculate filling at hatch level here so do it only once, and not every timestep.
         if(outlet_hatch_in_use) {
             filling_at_hatchlevel = this->calcResVolume(this->hatch_masl);
+        }
+
+        if(use_spillway) {
+            filling_at_spillway_Mm3 = this->calcResVolume(this->spillway_level_masl);
         }
     }
 }
@@ -448,6 +448,146 @@ void Reservoir::ValidateReservoirLevelMm3(size_t t, double level_Mm3) {
     }
 }
 ///////////////////////////////////////////////////////////////
+// d(masl)/d(Mm3) of calcResMasl: h = (-b + sqrt(b^2 + 4 a V)) / (2 a), so dh/dV = 1 / sqrt(b^2 + 4 a V), V in m3.
+double Reservoir::dResMasl_dMm3(double Mm3) {
+    const double a = length_m * slope_term;
+    const double b = length_m * width_m;
+    return 1000000.0 / sqrt(b*b + 4.0*a*Mm3*1000000.0);
+}
+///////////////////////////////////////////////////////////////
+// Backward pass for timestep t, the reverse of Simulate(t). x_grad means d(ValueFunction)/d(x).
+//
+// Forward stages of Simulate(t), V = res_Mm3:
+//   V1 = V0 + (inflow + up_inflow) * dt                 V0 = end volume of step t-1
+//   V2 = V1 - tunnel flow          (tunnel flow = GetTunnelFLow, uses up_res = relu_lo(V1 - LRW volume))
+//   V3 = V2 - hatch flow           (smin_nn of the desired flow and the water above the hatch level)
+//   V4 = V3 - auto-qmin flow       (smin_nn of the required flow and the water above the outlet)
+//   V5 = V4 - overflow             (spillway law capped by the water above the crest, uses masl(V4))
+//   cost_lrw = penalty * relu_hi(LRW - masl(V5)),  profit = -cost_lrw (- the FILLING_PENALTY cost)
+// The flows of the stages are read back from the Scenario arrays that Simulate wrote.
+//
+// Reads:  res_Mm3_grad[t], res_masl_grad[t], profit_grad[t], and from the downstream nodes up_inflow_grad[t] and,
+//         for the tunnel node, Hbrutto_grad[t] (the head uses the level at both ends of the step).
+// Writes: res_Mm3_grad[t-1] (or res_Mm3_init_grad at t = 0), up_inflow_grad[t], action_grad[t] (hatch), and through
+//         BackwardTunnelFlow the actions of the powerstation.
+// Supports RESERVOIR_GEOMETRY with SPILLWAY and no pumps. Everything else stops with an error.
+int Reservoir::Backward(size_t t) {
+
+    if(!use_reservoir_geometry || !use_spillway || fast_overflow || use_overflow_curve || use_reservoir_curve) {
+        LOG_ERR("Reservoir::Backward requires RESERVOIR_GEOMETRY and SPILLWAY (no curves, no FAST_OVERFLOW). Node idnr = " + std::to_string(int(idnr)) + "   nodename = " + nodename);
+    }
+    if(!ptr_pumps_as_source.empty() || !ptr_pumps_as_target.empty()) {
+        LOG_ERR("Reservoir::Backward does not support pumps yet. Node idnr = " + std::to_string(int(idnr)) + "   nodename = " + nodename);
+    }
+
+    const double dt_s = double(S->dt);
+    const double c    = dt_s / 1000000.0;        // m3/s -> Mm3
+    const double ci   = 1000000.0 / dt_s;        // Mm3 -> m3/s
+
+    // ---- Volumes after each stage, from the start volume and the stored flows ----
+    const double V0 = (t == 0) ? reservoir_init_Mm3 : S->res_Mm3[t-1];
+    const double V1 = V0 + (S->inflow[t] + S->up_inflow[t]) * c;
+    const double V2 = V1 - S->tunnelflow_m3s[t] * c;
+    const double V3 = V2 - S->hatchflow_m3s[t]  * c;
+    const double V4 = V3 - S->auto_qmin_m3s[t]  * c;
+    const double V5 = V4 - S->overflow_Mm3[t];
+    const double masl4 = calcResMasl(V4);
+    const double masl5 = calcResMasl(V5);
+
+    // ---- End of the step: level of V5 ----
+    // The adjoint of the end level comes from the LRW penalty, the head of the tunnel node, and external users of res_masl.
+    const double penalty = res_penalty * dt_s / 3600.0;
+    double g_masl5 = S->res_masl_grad[t];
+    g_masl5 += S->profit_grad[t] * penalty * relu_hi_d(res_LRW - masl5, EPS_M);     // profit = -cost_lrw
+    double g_masl0 = 0.0;                                                          // Adjoint of the start level masl(V0)
+    if(outlet_tunnel_in_use) {
+        const double Hbrutto_grad = ptr_downstream_node_tunnel->S->Hbrutto_grad[t]; // Hbrutto = (start + end) / 2 - z
+        g_masl5 += 0.5 * Hbrutto_grad;
+        g_masl0 += 0.5 * Hbrutto_grad;
+    }
+    double g_V5 = S->res_Mm3_grad[t] + g_masl5 * dResMasl_dMm3(V5);
+
+    // FILLING_PENALTY: cost = P dt/3600 r^2, r = relu_hi(f0 - fr), fr = (V5 - V_LRW) / W. profit = -cost.
+    if(filling_penalty > 0.0) {
+        const double W = filling_at_hrw_Mm3 - filling_at_lrw_Mm3;
+        const double x = filling_f0 - (V5 - filling_at_lrw_Mm3) / W;
+        g_V5 += S->profit_grad[t] * filling_penalty * dt_s / 3600.0 * 2.0 * relu_hi(x, EPS_FR) * relu_hi_d(x, EPS_FR) / W;
+    }
+
+    // ---- Overflow (spillway) ----
+    // overflow = smin_nn(o, avail),  o = C L h^1.5 dt,  h = relu_hi((masl(V4) - crest) / 2),  avail = relu_lo(V4 - V_crest)
+    const double x_h     = 0.5 * (masl4 - spillway_level_masl);
+    const double h       = relu_hi(x_h, EPS_M);
+    const double o       = spillway_C * spillway_L * h * sqrt(h) * c;
+    const double avail_o = relu_lo(V4 - filling_at_spillway_Mm3, EPS_MM3);
+    double dfa = 0.0, dfb = 0.0;
+    smin_nn_grad(o, avail_o, EPS_REL_FLOW, dfa, dfb);
+
+    // overflow leaves the reservoir (V5 = V4 - overflow) and arrives downstream as overflow * ci [m3/s]
+    const double g_ovf   = -g_V5 + ptr_downstream_node_overflow->S->up_inflow_grad[t] * ci;
+    const double do_dmasl4 = spillway_C * spillway_L * 1.5 * sqrt(h) * c * 0.5 * relu_hi_d(x_h, EPS_M);
+    double g_V4 = g_V5 + g_ovf * dfb * relu_lo_d(V4 - filling_at_spillway_Mm3, EPS_MM3);
+    g_V4 += g_ovf * dfa * do_dmasl4 * dResMasl_dMm3(V4);
+
+    // ---- Auto-qmin ----
+    // actual = smin_nn(required, relu_lo(V3 - V_outlet)),  required is a calendar value without gradient
+    double g_V3 = g_V4;
+    if(outlet_auto_qmin_in_use) {
+        double void_cost;
+        const double required_Mm3 = qmin.calcQminRequirement(S->year[t], S->month[t], S->day[t], &void_cost) * c;
+        const double filling_at_outlet_Mm3 = calcResVolume(outlet_auto_qmin_masl);
+        const double avail = relu_lo(V3 - filling_at_outlet_Mm3, EPS_MM3);
+        smin_nn_grad(required_Mm3, avail, EPS_REL_FLOW, dfa, dfb);
+
+        const double g_actual = -g_V4 + ptr_downstream_node_auto_qmin->S->up_inflow_grad[t] * ci;
+        g_V3 += g_actual * dfb * relu_lo_d(V3 - filling_at_outlet_Mm3, EPS_MM3);
+    }
+
+    // ---- Hatch ----
+    // hatch = smin_nn(desired, relu_lo(V2 - V_hatch)),  desired = (minQ + action * (maxQ - minQ)) * dt
+    double g_V2 = g_V3;
+    if(outlet_hatch_in_use) {
+        const double desired_Mm3 = (minQ_hatch + S->action[t][idnr] * (maxQ_hatch - minQ_hatch)) * c;
+        const double avail = relu_lo(V2 - filling_at_hatchlevel, EPS_MM3);
+        smin_nn_grad(desired_Mm3, avail, EPS_REL_FLOW, dfa, dfb);
+
+        const double g_hatch = -g_V3 + ptr_downstream_node_hatch->S->up_inflow_grad[t] * ci;
+        S->action_grad[t] += g_hatch * dfa * (maxQ_hatch - minQ_hatch) * c;
+        g_V2 += g_hatch * dfb * relu_lo_d(V2 - filling_at_hatchlevel, EPS_MM3);
+
+        // Hatch adjustment cost couples action[t] and action[t-1]: profit = -cost, cost = fee (sqrt(d^2 + eps^2) - eps)
+        if(hatch_adjustment_cost > 0.0 && t > 0) {
+            const double d  = S->action[t][idnr] - S->action[t-1][idnr];
+            const double gd = -S->profit_grad[t] * hatch_adjustment_cost * d / sqrt(d*d + EPS_HATCH_ACTION*EPS_HATCH_ACTION);
+            S->action_grad[t]   += gd;
+            S->action_grad[t-1] -= gd;
+        }
+    }
+
+    // ---- Tunnel ----
+    // V2 = V1 - tunnel flow, and the flow arrives at the powerstation as up_inflow (assigned, not added).
+    double g_V1 = g_V2;
+    if(outlet_tunnel_in_use) {
+        const double g_flow_m3s = -g_V2 * c + ptr_downstream_node_tunnel->S->up_inflow_grad[t];
+        const double up_res     = relu_lo(V1 - filling_at_lrw_Mm3, EPS_MM3);
+        const double g_up_res   = ptr_downstream_node_tunnel->BackwardTunnelFlow(t, up_res, g_flow_m3s);
+        g_V1 += g_up_res * relu_lo_d(V1 - filling_at_lrw_Mm3, EPS_MM3);
+    }
+
+    // ---- Inflow ----
+    S->up_inflow_grad[t] += g_V1 * c;
+    const double g_V0 = g_V1 + g_masl0 * dResMasl_dMm3(V0);
+    if(t > 0) {
+        S->res_Mm3_grad[t-1] += g_V0;
+    } else {
+        res_Mm3_init_grad = g_V0;
+    }
+
+    return 0;
+}
+
+
+///////////////////////////////////////////////////////////////
 int Reservoir::Simulate(size_t t) {
 
     // BVM 27 june 2025:
@@ -464,9 +604,6 @@ int Reservoir::Simulate(size_t t) {
     double overflow_Mm3;
     double outlet_auto_qmin_flow_Mm3;
     double total_inflow_Mm3;
-    double max_hatchflow;
-    double current_filling;
-    current_filling = -999.0; // To void warning
 
     #if HERSS_DEBUG_ALL
         printf("Node idnr = %d   nodename = %s\n ", int(this->idnr) , this->nodename.c_str() );
@@ -517,18 +654,16 @@ int Reservoir::Simulate(size_t t) {
             LOG_ERR("res_masl     = " + std::to_string(this->res_masl));
         }
 
-        // I think we should not allow for higher pressure than up to HRW, it should never pay off to flood.
+        
+        // The real level is used at both ends of the step (no cap at HRW, see end of Simulate).
         ptr_downstream_node_tunnel->start_of_stp_masl = this->res_masl;
 
-        if(  this->res_masl > this->res_HRW) {
-            ptr_downstream_node_tunnel->start_of_stp_masl = this->res_HRW;
-        }
 
-        // Before:
-        // ptr_downstream_node_tunnel->up_res_Mm3 = this->res_Mm3;
+        // SMOOTH 
+        // Reservoir::Simulate
+        ptr_downstream_node_tunnel->up_res_Mm3 =
+            relu_lo(this->res_Mm3 - this->filling_at_lrw_Mm3, EPS_MM3);   // 0 when empty, never above true value
 
-        // After: only water above LRW is actually usable for production
-        ptr_downstream_node_tunnel->up_res_Mm3 = std::max(0.0, this->res_Mm3 - this->filling_at_lrw_Mm3);
 
 
         ptr_downstream_node_tunnel->S->dt = S->dt;
@@ -559,14 +694,19 @@ int Reservoir::Simulate(size_t t) {
     this->res_Mm3 -= tunnelflow_Mm3;
 
     if(this->use_reservoir_geometry) {
+
         // Update the reservoir masl using the geometry. This is faster than using the curve, but less accurate. 
         this->res_masl = this->calcResMasl(this->res_Mm3);
+
     } else if(this->use_reservoir_curve) {
         ValidateReservoirLevelMm3(t, this->res_Mm3);
         // Update the reservoir masl using the curve. This is more accurate, but slower than using the geometry.
         this->res_masl = ac_res_Mm3_2_masl.x2y(this->res_Mm3);
     }
 
+
+
+    
 
     //-------------------------------------------------------------------
     // OUTLET HATCH
@@ -580,26 +720,26 @@ int Reservoir::Simulate(size_t t) {
             LOG_ERR("Check your action file, and make sure the action for the hatch is between 0.0 and 1.0");
         }
 
-        if(this->res_masl > this->hatch_masl ) {
-            // Some places we need to release water regardless of the actions set 
-            // This can be done by setting minQ_hatch to a low level.
-            hatchflow_Mm3 = this->minQ_hatch + S->action[t][this->idnr]*(this->maxQ_hatch - this->minQ_hatch);
-            hatchflow_Mm3 = MACRO_m3s_2_Mm3(hatchflow_Mm3, S->dt);  // Mm3
-            // also here we need to check that we do not release more water than we have available.
-            if(this->use_reservoir_geometry) {
-                current_filling = this->calcResVolume(this->res_masl);
-            } else {
-                current_filling = ac_res_masl_2_Mm3.x2y(this->res_masl);
-            }
+        // SMOOTH
+        // Some places we need to release water regardless of the actions set 
+        // This can be done by setting minQ_hatch to a low level.
+        double desired_hatch_m3s = this->minQ_hatch + S->action[t][this->idnr]*(this->maxQ_hatch - this->minQ_hatch);
+        double desired_hatch_Mm3 = MACRO_m3s_2_Mm3(desired_hatch_m3s, S->dt);  // Mm3
 
-            max_hatchflow = current_filling - filling_at_hatchlevel;
+        // Only water above the hatch level can be released. Working directly with volume
+        // replaces the "res_masl > hatch_masl" test and the volume->masl->volume round trip.
+        double available_hatch_Mm3 = relu_lo(this->res_Mm3 - this->filling_at_hatchlevel, EPS_MM3);
+        hatchflow_Mm3 = smin_nn(desired_hatch_Mm3, available_hatch_Mm3, EPS_REL_FLOW);
 
-            if (hatchflow_Mm3 > max_hatchflow) {
-                hatchflow_Mm3 = max_hatchflow;
-            }
-        }
         ptr_downstream_node_hatch->S->up_inflow[t] += MACRO_Mm3_2_m3s(hatchflow_Mm3, S->dt);  // m3/s
         this->res_Mm3 -= hatchflow_Mm3;
+
+        // SMOOTH. Wear of the hatch: smoothed |change of action|. The first step has no previous action and is free.
+        cost_hatch_adjust = 0.0;
+        if(hatch_adjustment_cost > 0.0 && t > 0) {
+            const double d = S->action[t][this->idnr] - S->action[t-1][this->idnr];
+            cost_hatch_adjust = hatch_adjustment_cost * (sqrt(d*d + EPS_HATCH_ACTION*EPS_HATCH_ACTION) - EPS_HATCH_ACTION);
+        }
 
         if(this->use_reservoir_geometry) {
             this->res_masl = this->calcResMasl(this->res_Mm3);
@@ -627,9 +767,10 @@ int Reservoir::Simulate(size_t t) {
         }
 
         // Only water above the outlet MASL is available
-        double available_Mm3 = std::max(0.0, this->res_Mm3 - filling_at_outlet_Mm3);
+        // SMOOTH
+        double available_Mm3 = relu_lo(this->res_Mm3 - filling_at_outlet_Mm3, EPS_MM3);
         double required_Mm3  = MACRO_m3s_2_Mm3(required_m3s, S->dt);
-        double actual_Mm3    = std::min(required_Mm3, available_Mm3);
+        double actual_Mm3    = smin_nn(required_Mm3, available_Mm3, EPS_REL_FLOW);
         double actual_m3s    = MACRO_Mm3_2_m3s(actual_Mm3, S->dt);
 
         if(actual_Mm3 < required_Mm3 - 1e-6 && required_m3s > 1e-3) {
@@ -645,6 +786,7 @@ int Reservoir::Simulate(size_t t) {
         ValidateReservoirLevelMm3(t, this->res_Mm3);
     }
 
+    
     // Update the reservoir masl
     if(this->use_reservoir_geometry) {
         this->res_masl = this->calcResMasl(this->res_Mm3);
@@ -696,18 +838,13 @@ int Reservoir::Simulate(size_t t) {
     
     // There is a treshold here. We make the penalty dependent on how much below LRW we are
     // This is so we can see an improvement when we do gradient optimization.
-    cost_lrw = 0.0;
-    if( this->res_masl  < this->res_LRW) {
-        // cost_lrw = this->res_penalty*dt/3600;    Old code
-        cost_lrw = (this->res_penalty*this->dt/3600) * (this->res_LRW - this->res_masl);
-    }
+    // SMOOTH
+    cost_lrw = (this->res_penalty*this->dt/3600) * relu_hi(this->res_LRW - this->res_masl, EPS_M);
 
     if(outlet_tunnel_in_use) {
+        // The real level is used at both ends of the step. Above HRW the water sits on the spillway,
+        // and the turbines see the full head (no cap at HRW).
         ptr_downstream_node_tunnel->end_of_stp_masl = this->res_masl;
-        // I think we should not allow for higher pressure than up to HRW, it should never pay off to flood.
-        if(  this->res_masl > this->res_HRW) {
-            ptr_downstream_node_tunnel->end_of_stp_masl = this->res_HRW;
-        }
     }
 
     // Terje Sandø, pump-station work, July 2026.
@@ -718,18 +855,20 @@ int Reservoir::Simulate(size_t t) {
     // Fractional_filling
     double fract_filling = (res_Mm3  - filling_at_lrw_Mm3) / (filling_at_hrw_Mm3 - filling_at_lrw_Mm3);
 
+    // SMOOTH. A soft reserve: the cost grows with the square of the shortfall below the fractional filling f0.
+    cost_filling = 0.0;
+    if(filling_penalty > 0.0) {
+        const double shortfall = relu_hi(filling_f0 - fract_filling, EPS_FR);
+        cost_filling = filling_penalty * double(this->dt) / 3600.0 * shortfall * shortfall;
+    }
+
     remaining_Mm3 = res_Mm3;
 
     // We only value water up to HRW
-    remaining_active_Mm3 = fract_filling  * (filling_at_hrw_Mm3 - filling_at_lrw_Mm3);
-
-    if(fract_filling > 1.0) {
-        remaining_active_Mm3 = (filling_at_hrw_Mm3 - filling_at_lrw_Mm3);
-    }
-
-    if(fract_filling < 0.0) {
-        remaining_active_Mm3 = 0.0;
-    }
+    // SMOOTH: smooth clamp of (res_Mm3 - filling_at_lrw_Mm3) to [0, active capacity]
+    double active_capacity_Mm3 = filling_at_hrw_Mm3 - filling_at_lrw_Mm3;
+    double above_lrw_Mm3       = res_Mm3 - filling_at_lrw_Mm3;
+    remaining_active_Mm3 = relu_hi(above_lrw_Mm3, EPS_MM3) - relu_hi(above_lrw_Mm3 - active_capacity_Mm3, EPS_MM3);
 
 
     if(fract_filling < -100.0) {
@@ -757,7 +896,8 @@ int Reservoir::Simulate(size_t t) {
     S->res_masl[t]        = res_masl;
     S->res_fr[t]          = fract_filling;
     S->overflow_Mm3[t]    = overflow_Mm3;
-    S->cost[t]            = cost_lrw;
+    S->cost[t]            = cost_lrw + cost_filling + cost_hatch_adjust;
+    S->adjust_cost[t]     = cost_hatch_adjust;
     S->Power[t]           = 0.0;  // No power production in reservoirs
 
     double tot_out        = hatchflow_Mm3 + tunnelflow_Mm3 + overflow_Mm3 + outlet_auto_qmin_flow_Mm3;
@@ -846,6 +986,34 @@ int Reservoir::ReadNodeData(string filename){
                     
                     if (keyword2.compare("FLOODLEVEL_PENALTY") == 0) {
                          this->floodlevel_penalty = atof(value2.c_str() );
+                    }
+
+                    // FILLING_PENALTY f0 P   [P in Euro per hour]
+                    if (keyword2.compare("FILLING_PENALTY") == 0) {
+                        if(line_obj.calcNrCols(&tmpline2) != 3) {
+                            LOG_ERR("FILLING_PENALTY needs two values: f0 and P. Reservoir: " + this->nodename);
+                        }
+                        this->filling_f0 = atof(value2.c_str() );
+                        value2 = line_obj.extractNextElementFromLine(&line);
+                        this->filling_penalty = atof(value2.c_str() );
+                        if(this->filling_f0 <= 0.0 || this->filling_f0 > 1.0) {
+                            LOG_ERR("FILLING_PENALTY f0 must be in (0, 1]. Reservoir: " + this->nodename);
+                        }
+                        if(this->filling_penalty < 0.0 || this->filling_penalty > VERY_LARGE_NUMBER) {
+                            LOG_ERR("FILLING_PENALTY P must be in [0, VERY_LARGE_NUMBER]. Reservoir: " + this->nodename);
+                        }
+                    }
+
+                    // HATCH_ADJUSTMENT_COST fee   [Euro per full hatch range of travel]
+                    if (keyword2.compare("HATCH_ADJUSTMENT_COST") == 0) {
+                        this->hatch_adjustment_cost = atof(value2.c_str() );
+                        if(this->hatch_adjustment_cost < 0.0 || this->hatch_adjustment_cost > VERY_LARGE_NUMBER) {
+                            LOG_ERR("HATCH_ADJUSTMENT_COST must be in [0, VERY_LARGE_NUMBER]. Reservoir: " + this->nodename);
+                        }
+                    }
+
+                    if (keyword2.compare("LOCAL_ENERGY_EQUIVALENT") == 0) {
+                         this->local_energy_equivalent = atof(value2.c_str() );
                     }
 
 
@@ -1158,7 +1326,15 @@ int Reservoir::ReadNodeData(string filename){
 
 
     if(!downstream_node_in_use){
+
+        cout << "Downstream node not set for reservoir: " << nodename << endl;
+        cout << "Reservoir name: " << nodename << ", ID: " << idnr << endl;
+
+        cout << "Please check the topology file for the correct downstream node." << endl;
+        cout << "Exiting due to missing downstream node." << endl;
+
         LOG_ERR("ERROR: Downstream node has to be set for reservoir. Please add a channel node downstream of the reservoirs");
+
     }
 
 
@@ -1226,7 +1402,13 @@ int Reservoir::ReadStateFile(string filename){
         }
     }
 
+
+
     if(!found_node) {
+        cout << "Reservoir name: " << nodename << ", ID: " << idnr << " not found in statefile: " << filename << endl;
+        cout << "Please check the statefile for the correct reservoir information." << endl;
+        printf("file: %s  linenr: %d  function: %s \n", __FILE__ , __LINE__, __FUNCTION__);
+
         LOG_WARN("ReadStateFile     idnr=" + std::to_string(int(idnr)) + "  nodename=" + nodename);
 		LOG_ERR("There is something wrong with nodes in the statefile " + filename);
     }

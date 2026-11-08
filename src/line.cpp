@@ -61,7 +61,12 @@ int Line::calcNrCols(string* line)
         word = extractNextElementFromLine(&tmp_str);
         if( word.length() > 0 ) cols++;
         if( tmp_str.length() < 1 ) return cols;
-        if(cols > MAX_WORDS ) exit(0);
+        if(cols > MAX_WORDS ) {
+			LOG_WARN("Error: Number of columns exceeds MAX_WORDS.");
+			printf("ERROR:    file: %s  linenr: %d  function: %s \n", __FILE__ , __LINE__, __FUNCTION__);
+			LOG_ERR("Number of columns exceeds MAX_WORDS.");
+			exit(EXIT_FAILURE);
+		}
     }
     return cols;
 }

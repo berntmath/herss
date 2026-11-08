@@ -1,0 +1,42 @@
+Riversystem uTAHPS
+Node Idnr Nodename          Nodetype int Nodetypename Remaining_Mm3
+Node  0 HJELLE               Nodetype 0  RESERVOIR             10.2295 
+Node  1 SVOLETJONN           Nodetype 1  PSTATION              0.0000 
+Node  2 VANAROSEN            Nodetype 2  CHANNEL               0.0000 
+Node  3 GRESSE               Nodetype 0  RESERVOIR             153.9226 
+Node  4 GRONANI              Nodetype 2  CHANNEL               0.0000 
+Node  5 TOPPSY               Nodetype 0  RESERVOIR             386.6318 
+Node  6 SVEIGSHYL_I          Nodetype 1  PSTATION              0.0000 
+Node  7 SVEIGSHYL_II         Nodetype 1  PSTATION              0.0000 
+Node  8 DALSANA              Nodetype 2  CHANNEL               0.0580 
+Node  9 KROKNESVATN          Nodetype 0  RESERVOIR             211.0813 
+Node 10 EASTER               Nodetype 1  PSTATION              0.0000 
+Node 11 HYNNEKLEIV           Nodetype 2  CHANNEL               0.1360 
+-------------------------------------------
+GLOBAL WATERBALANCE
+start_water_Mm3   = 698.630109
+inflow_volume_Mm3 = 386.061336
+outflow_Mm3       = 322.632276
+end_water_Mm3     = 762.059168
+waterbalance      = 0.000000
+Note that there might be dead water below LRW in the system
+-------------------------------------------
+Average_price_Euro           = 137.878
+RestPrice_Euro               = 101.000
+tot_remaining_Mm3            = 762.059
+tot_active_remaining_Mm3     = 364.178
+tot_remaining_MWh            = 73070.479
+tot_remaining_Euro           = 7380118.338
+Sum_Production_MWh           = 192151.543
+Sum_Pump_Consumption_MWh     = 0.000
+tot_income_Euro              = 30415673.221
+Avg_achieved_price_E_MWh     = 158.290
+sum_qmin_cost_Euro           = 0.000
+sum_lrw_cost_Euro            = 5.142
+sum_startstopcost_Euro       = 1042.711
+sum_max_adjustment_cost      = 0.000
+sum_hatch_adjustment_cost    = 0.000
+sum_aggressive_actions_cost  = 19.437
+tot_cost_Euro                = 1067.289
+tot_profit_Euro              = 30414605.932
+valuefunction_Euro           = 37794724.270

@@ -1,0 +1,103 @@
+##########################################################################
+# TOPOLOGY FILE Upper Tovdalen Hydro Power System (uTAHPS)
+# Testing Intake 
+# BVM Sep, 2026
+##########################################################################
+
+
+##########################################################################
+# G_INTAKE, for testing purposes
+# NODE NODETYPE(RESERVOIR/PSTATION/CHANNEL/PUMP/INTAKE) IDNR NAME
+NODE INTAKE 0 G_INTAKE
+
+# Id number to downstream node receiving flood water
+FLOODWATER_IDNR 3
+
+# Capture capacity of intake  [m3/s]
+CAPTURE_CAPACITY 10.0 
+
+# Id number to downstream node receiving captured water
+CAPCAP_DOWN_IDNR 1 
+
+# Amount of water released until intake is empty [m3/s] 
+CONST_HATCH_RELEASE 0.5
+
+# Id number of downstream node receiving the constant flow from hatch 
+HATCHREL_DOWN_IDNR 3
+
+# Volume of intake (reservoir), at a Qmin flowrate at 0.5 m3/s, this is 4-5 days of flow. 
+VOLUME 0.2
+
+ENDNODE
+##########################################################################
+
+
+
+##########################################################################
+# HJELLEVATN RESERVOIR
+# NODE NODETYPE(RESERVOIR/PSTATION/CHANNEL) IDNR NAME
+NODE RESERVOIR 1 HJELLE
+HRW 757.0
+LRW 748.0
+RES_PENALTY 300
+# Reservoir curve points, [masl, Mm3] Curve must go below hatch_masl.
+RESERVOIR_CURVE 7
+747	0.0
+748	1.0
+749	2.37
+750	3.24
+757	10.0
+758	15.0
+760	100
+# Overflow curve, points, downstream idnr   [masl, m3s]
+OVERFLOW_CURVE 3 3
+757	0.0
+758	10.0
+760	200.0
+# Outlet hatch downstream_nodeid, qmin_hatch, qmax_hatch, hatch_masl
+OUTLET_HATCH -9999
+OUTLET_TUNNEL 2
+OUTLET_AUTO_QMIN -9999
+ENDNODE
+########################################################################################
+
+
+#######################################################################################
+# SVOLETJONN POWERSTATION HJELLEVATN IS INTAKE 
+NODE PSTATION 2 SVOLETJONN
+DOWNLINK_IDNR 3
+# Turbine efficiency curve [M3s, %]
+NR_GENERATORS 1
+GENERATOR 0
+TURBINE_CURVE 10
+0.00	0
+1.00	50
+1.72	80
+2.27	90
+2.79	93
+3.19	93
+3.47	93
+3.67	92
+3.79	91
+4.00	88  
+GENERATOR_MAX_DISCHARGE 4.0
+STATIC_GENERATOR_EFFICIENCY	0.96
+HEADLOSSCOEF	0.3
+SHARED_PENSTOCK	TRUE
+POWSTAT_MASL 690.0
+POWSTAT_MIN_DISCHARGE	1.0
+POWSTAT_STARTSTOP	2.0
+LOCAL_ENERGY_EQUIVALENT	0.11
+AUTO_QMIN -9999
+MAX_ADJUST -9999
+ENDNODE
+#######################################################################################
+
+########################################################################################
+NODE CHANNEL 3 VANAROSEN -9
+N_CASCADE_LINRES 3
+K_TRAVELTIME_HOURS 4
+QMIN -9999
+ENDNODE
+########################################################################################
+

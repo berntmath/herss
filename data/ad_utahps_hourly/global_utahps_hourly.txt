@@ -1,0 +1,53 @@
+# Project: 		Hydraulic Economic River System Simulator (HERSS)
+# Programmer: 	Bernt Viggo Matheussen, 4 March, 2024.
+#               Global configuration file for the Upper Tovdalen Artificial Hydro Power System (uTAHPS) 
+
+SYSTEMNAME uTAHPS
+
+# Input
+INPUTDIR ./
+ACTIONFILE actions_utahps.txt
+INFLOWFILE inflowseries_utahps.txt
+PRICEFILE pricefile_utahps.txt
+TOPOLOGYFILE topology_utahps.txt
+STARTSTATEFILE start_state_utahps.txt
+
+
+# Output information 
+OUTSTATEFILE outstate_utahps.txt
+WRITE_NODEFILES 1
+OUTPUTDIR ./output/
+
+# Write the gradients (HERSS-AD) to output/gradients_<system>.txt
+AUTODIFF TRUE
+
+
+# ---------------------------------------------------------------------------
+# HERSS-AD: Adam optimization of the generator actions. Skipped if ADAM_OPTIMIZER is FALSE.
+# The run optimizes first, then writes the normal output files for the optimized actions.
+ADAM_OPTIMIZER TRUE
+
+# Start learning rate. The actions are in [0,1]. It decays with a cosine to 10 % of this value.
+LEARNING_RATE 0.02
+
+# Maximum number of iterations (each is one simulation and one backward pass).
+MAX_ITERATIONS 10000
+
+# Stop after this many iterations without improvement of the value function.
+# The value function is not monotone in Adam, a large value gives a converged result.
+PATIENCE 1000
+
+# Stop when the gradient norm of the free actions is below this value. 0 = off.
+GRAD_TOLERANCE 0
+
+# Start actions: FILE (the actions file) or a number in [0,1], all actions start at this value.
+# Do not start from 0, there the gradient keeps the actions at zero.
+# START_ACTIONS 0.5
+
+
+# The optimized actions, written to OUTPUTDIR in the same format as the actions file.
+OPTIMIZED_ACTIONFILE actions_optimized.txt
+
+# Print the value function in every iteration (TRUE, FALSE)
+ADAM_VERBOSE FALSE
+

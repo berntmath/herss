@@ -19,6 +19,7 @@
 # one for each time series. The x-axis is shared across all subplots
 # and represents time, while the y-axes represent the respective values
 #  of inflow, price, and action.
+# Aborts before starting GMT if any required input is not a regular file.
 
 
 
@@ -28,8 +29,21 @@ OUTBASE="inputseries"
 
 INDIR="../data/mini_utahps_hourly/"
 INPUT="${INDIR}/inflowseries.txt"
+
 PRICE_INPUT="${INDIR}/pricefile.txt"
 ACTION_INPUT="${INDIR}/actions.txt"
+
+
+
+for input_file in "${INPUT}" "${PRICE_INPUT}" "${ACTION_INPUT}"; do
+    if [[ ! -f "${input_file}" ]]; then
+        printf 'Error: required input file not found: %s\n' "${input_file}" >&2
+        exit 1
+    fi
+done
+
+
+
 
 
 gmt begin "${OUTBASE}" png,pdf

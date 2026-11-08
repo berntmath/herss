@@ -85,6 +85,17 @@ double Powerstation::calcEfficiency(size_t gen_idx, double q_m3s) {  // Calculat
         return 0.0;
     }
 
+
+    if (generators[gen_idx].use_quadratic_eff_curve) {
+        const Generator &gen = generators[gen_idx];
+        double Qn  = q_m3s / gen.max_discharge;                 // normalised 0-1
+        double eta = gen.a_quad*Qn*Qn + gen.b_quad*Qn + gen.c_quad;
+        return std::max(eta, 0.0);                              // returned as a fraction, not %
+    }
+
+
+
+
     if(generators[gen_idx].use_uniform_normalized_curve) {
         // We use the fast lookup method for uniform curves. 
         double Qn = q_m3s / generators[gen_idx].max_discharge;    // normalize to 0-1
@@ -105,8 +116,152 @@ double Powerstation::calcEfficiency(size_t gen_idx, double q_m3s) {  // Calculat
 
 }
 ////////////////////////////////////////////////////////////////
+// Derivative of calcEfficiency with respect to the discharge. Mirrors the branches in calcEfficiency.
+double Powerstation::calcEfficiencyGrad(size_t gen_idx, double q_m3s) {
 
+    if(q_m3s < 0.000001) {
+        return 0.0;
+    }
 
+    const Generator &gen = generators[gen_idx];
+
+    if (gen.use_quadratic_eff_curve) {
+        double Qn  = q_m3s / gen.max_discharge;
+        double eta = gen.a_quad*Qn*Qn + gen.b_quad*Qn + gen.c_quad;
+        if (eta <= 0.0) {
+            return 0.0;     // calcEfficiency returns max(eta, 0)
+        }
+        return (2.0*gen.a_quad*Qn + gen.b_quad) / gen.max_discharge;
+    }
+
+    if (gen.use_uniform_normalized_curve) {
+        double Qn = q_m3s / gen.max_discharge;
+        int i = (int)(Qn * (N_UNIFORM_EFF_CURVE_POINTS-1));
+        if (i > N_UNIFORM_EFF_CURVE_POINTS-2) {
+            i = N_UNIFORM_EFF_CURVE_POINTS-2;
+        }
+        return (gen.uniform_normalized_curve[i+1] - gen.uniform_normalized_curve[i]) * (N_UNIFORM_EFF_CURVE_POINTS-1) / gen.max_discharge / 100.0;
+    }
+
+    LOG_ERR("Backward is only implemented for QUADRATIC_EFF_EQUATION and UNIFORM_NORMALIZED_CURVE. Powerstation " + std::to_string(int(idnr)) + " (" + nodename + ")");
+    return 0.0;
+}
+////////////////////////////////////////////////////////////////
+// Backward pass for timestep t. x_grad means d(ValueFunction)/d(x).
+// Reads:   profit_grad[t], Power_grad[t], up_inflow_grad[t] of the downstream node.
+// Writes:  Power_grad[t], generators[g].action_grad[t] and [t-1] (start/stop cost), Hbrutto_grad[t], up_inflow_grad[t].
+// Hbrutto_grad is consumed by the upstream reservoir, and up_inflow_grad by the tunnel flow of the upstream reservoir.
+// The aggressive-actions cost belongs to the tunnel flow and is differentiated in BackwardTunnelFlow.
+int Powerstation::Backward(size_t t) {
+
+    const size_t G = generators.size();
+
+    // Recompute the quantities of Simulate(t) that the gradients depend on.
+    std::vector<double> Q_req(G, 0.0);   // Requested flow per generator, action * max_discharge
+    std::vector<double> Q(G, 0.0);       // Flow per generator after the water-availability scaling
+    double T_req = 0.0;
+    for (size_t g = 0; g < G; ++g) {
+        if (generators[g].action.size() > t) {
+            Q_req[g] = generators[g].action[t] * generators[g].max_discharge;
+        }
+        T_req += Q_req[g];
+    }
+
+    const double up_inflow = S->up_inflow[t];
+    const bool   scaled    = (T_req > up_inflow);                 // Simulate scales all generators by up_inflow / T_req
+    const double scale     = scaled ? up_inflow / T_req : 1.0;
+    const double total_Q   = scaled ? up_inflow : T_req;
+    for (size_t g = 0; g < G; ++g) {
+        Q[g] = Q_req[g] * scale;
+    }
+
+    // The head of step t as stored by Simulate. start_of_stp_masl/end_of_stp_masl are overwritten every step,
+    // so they hold the values of the last step when Backward runs.
+    const double Hbrutto = S->Hbrutto[t];
+    const double dt_s    = double(S->dt);
+    const double k       = 1000.0 * GRAVITY / 1000000.0 * static_gen_efficiency * dt_s / 3600.0;   // Power[MWh] = k * eta * Hnetto * Q
+
+    // income = sum_g Power_g * price, and profit = income - costs
+    S->Power_grad[t] += S->profit_grad[t] * S->price[t];
+    const double Power_grad = S->Power_grad[t];
+
+    std::vector<double> Q_grad(G, 0.0);   // Adjoint of the flow per generator after scaling
+    double Hbrutto_grad  = 0.0;
+    double total_Q_grad  = 0.0;           // Adjoint of total_Q: flow into the downstream node (+ head loss below)
+
+    if (ptr_downstream_node != NULL) {
+        total_Q_grad += ptr_downstream_node->S->up_inflow_grad[t];   // downstream up_inflow += total_Q
+    }
+
+    if (shared_penstock) {
+        // Hnetto = Hbrutto - headlosscoef * total_Q^2 is common to all generators
+        const double Hnetto = Hbrutto - headlosscoef * total_Q * total_Q;
+        double dPower_dHnetto = 0.0;
+        for (size_t g = 0; g < G; ++g) {
+            const double eta  = calcEfficiency(g, Q[g]);
+            const double deta = calcEfficiencyGrad(g, Q[g]);
+            Q_grad[g]       = Power_grad * k * (deta * Hnetto * Q[g] + eta * Hnetto);
+            dPower_dHnetto += k * eta * Q[g];
+        }
+        const double Hnetto_grad = Power_grad * dPower_dHnetto;
+        Hbrutto_grad  = Hnetto_grad;
+        total_Q_grad += Hnetto_grad * (-2.0 * headlosscoef * total_Q);
+    } else {
+        // Separate penstocks: Hnetto_g = Hbrutto - headlosscoef * Q_g^2
+        for (size_t g = 0; g < G; ++g) {
+            const double Hnetto = Hbrutto - headlosscoef * Q[g] * Q[g];
+            const double eta    = calcEfficiency(g, Q[g]);
+            const double deta   = calcEfficiencyGrad(g, Q[g]);
+            Q_grad[g]     = Power_grad * k * (deta * Hnetto * Q[g] + eta * Hnetto - eta * Q[g] * 2.0 * headlosscoef * Q[g]);
+            Hbrutto_grad += Power_grad * k * eta * Q[g];
+        }
+    }
+
+    // Back through the scaling of Simulate.
+    std::vector<double> Q_req_grad(G, 0.0);
+    if (!scaled) {
+        // Q_g = Q_req_g and total_Q = sum_g Q_g
+        for (size_t g = 0; g < G; ++g) {
+            Q_req_grad[g] = Q_grad[g] + total_Q_grad;
+        }
+    } else {
+        // Q_g = Q_req_g * up_inflow / T_req, total_Q = up_inflow
+        double sum_Qgrad_Qreq = 0.0;
+        for (size_t g = 0; g < G; ++g) {
+            sum_Qgrad_Qreq += Q_grad[g] * Q_req[g];
+        }
+        for (size_t g = 0; g < G; ++g) {
+            Q_req_grad[g] = Q_grad[g] * scale - (up_inflow / (T_req * T_req)) * sum_Qgrad_Qreq;
+        }
+        S->up_inflow_grad[t] += sum_Qgrad_Qreq / T_req + total_Q_grad;
+    }
+
+    for (size_t g = 0; g < G; ++g) {
+        if (generators[g].action_grad.size() <= t) {
+            generators[g].action_grad.resize(S->stps, 0.0);
+        }
+        generators[g].action_grad[t] += Q_req_grad[g] * generators[g].max_discharge;
+    }
+
+    // Start/stop cost: profit = ... - (fee / 2) * sum_g (s_prev - s_cur)^2, with s = smooth_on(action).
+    // It couples the action of step t with the action of step t-1. At t = 0 the previous state is a constant.
+    for (size_t g = 0; g < G; ++g) {
+        if (generators[g].action.size() <= t) continue;
+        const double a_cur  = generators[g].action[t];
+        const double s_cur  = smooth_on(a_cur);
+        const double s_prev = (t > 0) ? smooth_on(generators[g].action[t-1]) : ((init_Power > 0.01) ? 1.0 : 0.0);
+
+        generators[g].action_grad[t] += S->profit_grad[t] * powstat_startstop * (s_prev - s_cur) * smooth_on_d(a_cur);
+        if (t > 0) {
+            generators[g].action_grad[t-1] -= S->profit_grad[t] * powstat_startstop * (s_prev - s_cur) * smooth_on_d(generators[g].action[t-1]);
+        }
+    }
+
+    S->Hbrutto_grad[t] += Hbrutto_grad;
+
+    return 0;
+}
+////////////////////////////////////////////////////////////////
 int Powerstation::Simulate(size_t t) {
 
     // CHANGE BY OVE: Initialize all parameters as 0.0
@@ -142,15 +297,17 @@ int Powerstation::Simulate(size_t t) {
 
     // BVM June 2026. 
     // Fixing bug related to aggressive actions
-    if (total_Q > S->up_inflow[t] * 1.000001) {
-        LOG_WARN("Agressive actions " + std::to_string(total_Q) + " m3/s) exceeds inflow (" + std::to_string(S->up_inflow[t]) + " m3/s) at timestep " + std::to_string(t) + " for node " + std::to_string(int(idnr)) + " (" + nodename + ")\n");
-        //LOG_INFO("Aggressive actions?  total_Q > S->up_inflow[t]  ");
-        // LOG_WARN("Aggressive actions?   total_Q > S->up_inflow[t]  ");
-        //LOG_WARN("Check your action file, and make sure the total discharge for the powerstation does not exceed the available inflow");
-        total_Q = 0.0;
-        for (size_t g = 0; g < generators.size(); ++g) { 
-            Q_gen[g] = 0.0;
+    // The tunnel has already capped the flow smoothly at the available water, so the station
+    // delivers exactly what it receives: all generators are scaled by up_inflow / requested flow.
+    if (total_Q > S->up_inflow[t]) {
+        if (total_Q > S->up_inflow[t] * 1.000001) {
+            LOG_WARN("Agressive actions " + std::to_string(total_Q) + " m3/s) exceeds inflow (" + std::to_string(S->up_inflow[t]) + " m3/s) at timestep " + std::to_string(t) + " for node " + std::to_string(int(idnr)) + " (" + nodename + ")\n");
         }
+        double scale = S->up_inflow[t] / total_Q;
+        for (size_t g = 0; g < generators.size(); ++g) { 
+            Q_gen[g] *= scale;
+        }
+        total_Q = S->up_inflow[t];
     }
 
 
@@ -254,27 +411,26 @@ int Powerstation::Simulate(size_t t) {
 
     // Now we check for start and stop costs
     // We penalise when starting and stopping. 
+    // SMOOTH. A generator is running when the smooth indicator smooth_on(action) is 1, and stopped when it is 0.
+    // The cost is (fee / 2) * (s_previous - s_current)^2: the old fee / 2 for every full start or stop, and a
+    // partial cost with a gradient for actions in the narrow zone above the threshold (see smooth_on in herss.h).
     startstopCost = 0.0;
     
     for (size_t g = 0; g < generators.size(); ++g) {
-        double previous_action = 0.0;
+        double previous_state = 0.0;
         if (t > 0) {
-            previous_action = generators[g].action[t-1];
+            previous_state = smooth_on(generators[g].action[t-1]);
         } else {
             // Terje Sandø, August 2026.
             // At t = 0 the previous state comes from the statefile, so a station that was
             // already running at the end of the previous run is not charged a start cost.
-            previous_action = (init_Power > 0.01) ? 1.0 : 0.0;
+            previous_state = (init_Power > 0.01) ? 1.0 : 0.0;
         }
-        double current_action = 0.0;
+        double current_state = 0.0;
         if (generators[g].action.size() > t) {
-            current_action = generators[g].action[t];
-        } else {
-            current_action = 0.0;
+            current_state = smooth_on(generators[g].action[t]);
         }
-        if ((previous_action > 0.01) != (current_action > 0.01)) {
-            startstopCost += this->powstat_startstop / 2.0;
-        }
+        startstopCost += this->powstat_startstop / 2.0 * (previous_state - current_state) * (previous_state - current_state);
     }
 
     
@@ -484,6 +640,35 @@ int Powerstation::ReadNodeData(string filename) {
                             value   = line_obj.extractNextElementFromLine(&line);
                             gen_data_lines++;
                             
+
+                            //------------------------------- QUADRATIC_EFF_EQUATION ---------------------------------
+                            if(keyword == "QUADRATIC_EFF_EQUATION") {
+
+                                generators[g].use_quadratic_eff_curve = true;
+                                generators[g].a_quad = atof(value.c_str());
+                                
+                                value   = line_obj.extractNextElementFromLine(&line);
+                                generators[g].b_quad = atof(value.c_str());
+
+                                value   = line_obj.extractNextElementFromLine(&line);
+                                generators[g].c_quad = atof(value.c_str());
+
+                                //cout << "Generator " << g << ": a_quad = " << generators[g].a_quad << ", b_quad = " <<
+                                //    generators[g].b_quad << ", c_quad = " << generators[g].c_quad << "\n";
+
+                                // --- ADD: read GENERATOR_MAX_DISCHARGE (was missing) ---
+                                line    = gc->topoparser.getLine(gen_data_lines);
+                                keyword = line_obj.extractNextElementFromLine(&line);
+                                value   = line_obj.extractNextElementFromLine(&line);
+                                if(keyword != "GENERATOR_MAX_DISCHARGE") {
+                                    LOG_ERR("ERROR: Expected GENERATOR_MAX_DISCHARGE for generator " + to_string(g));
+                                }
+                                generators[g].max_discharge = atof(value.c_str());
+                                gen_data_lines++;
+                            }
+                            //------------------------------- END QUADRATIC_EFF_EQUATION ---------------------------------
+
+
                             if(keyword == "UNIFORM_NORMALIZED_CURVE") {
 
                                 if(stoi(value) != N_UNIFORM_EFF_CURVE_POINTS) {
@@ -578,6 +763,7 @@ int Powerstation::ReadNodeData(string filename) {
             LOG_ERR("ERROR: Negative max discharge for generator " + std::to_string(g) + " in powerstation " + std::to_string(int(idnr)) + " (" + nodename + ")");
         }
     }
+
 
     return 0;
 }
@@ -764,53 +950,77 @@ int Powerstation::WriteNodeOutput(GlobalConfig *gc) {
 }
 //////////////////////////////////////////////////////////////////////////////////
 double Powerstation::GetTunnelFLow(size_t t) {
-    double flow = 0.0;
+
     aggressive_actions_cost = 0.0;
     S->auto_qmin_m3s[t] = 0.0;
 
-    // Sum actions for all generators
-    double total_action = 0.0;
+    double flow = 0.0;
     for (size_t g = 0; g < generators.size(); ++g) {
-        if (generators[g].action.size() > t && generators[g].action[t] < -0.000001) {
+        if (generators[g].action.size() <= t) continue;
+        if (generators[g].action[t] < -0.000001) {
             LOG_WARN("ERROR: action is negative for generator " + std::to_string(g));
             LOG_ERR("NODE PSTATION " + std::to_string(int(idnr)) + " " + nodename + " action= " + std::to_string(generators[g].action[t]));
         }
-        if (generators[g].action.size() > t) {
-            total_action += generators[g].action[t];
+        flow += generators[g].action[t] * generators[g].max_discharge;
+    }
+
+    if (auto_qmin > 0.0) {
+        double raw = flow;
+        flow = smax(flow, auto_qmin, EPS_M3S);
+        S->auto_qmin_m3s[t] = flow - raw;     // contribution of the floor
+    }
+
+    // Penalty is exactly zero when the request is feasible.
+    double excess = MACRO_m3s_2_Mm3(flow, S->dt) - up_res_Mm3;
+    aggressive_actions_cost = relu_lo(excess, EPS_MM3) * HERSS_AGGRESSIVE_ACTIONS_COST;
+    S->cost_aggressive_actions[t] = aggressive_actions_cost;
+
+    // Cap at available water. Never negative, never above available.
+    return smin_nn(flow, MACRO_Mm3_2_m3s(up_res_Mm3, S->dt), EPS_REL_FLOW);
+}
+//////////////////////////////////////////////////////////////////////////////////
+// Adjoint of GetTunnelFLow(t) for the given up_res_Mm3 (the reservoir recomputes it, the member is overwritten every step).
+//   flow_grad = d(VF)/d(tunnel flow [m3/s]), as seen by the reservoir and by the water arriving at this station.
+// Adds d(VF)/d(action) to generators[g].action_grad[t] and returns d(VF)/d(up_res_Mm3).
+// The aggressive-actions cost is part of this station's profit, so it uses profit_grad[t].
+double Powerstation::BackwardTunnelFlow(size_t t, double up_res_Mm3, double flow_grad) {
+
+    const double dt_s        = double(S->dt);
+    const double Mm3_per_m3s = dt_s / 1000000.0;
+    const double m3s_per_Mm3 = 1000000.0 / dt_s;
+
+    double flow_req = 0.0;     // Sum of action * max_discharge
+    for (size_t g = 0; g < generators.size(); ++g) {
+        if (generators[g].action.size() <= t) continue;
+        flow_req += generators[g].action[t] * generators[g].max_discharge;
+    }
+
+    double flow         = flow_req;     // After the auto_qmin floor
+    double dflow_dreq   = 1.0;
+    if (auto_qmin > 0.0) {
+        flow       = smax(flow_req, auto_qmin, EPS_M3S);
+        dflow_dreq = 1.0 - relu_hi_d(auto_qmin - flow_req, EPS_M3S);
+    }
+
+    // aggressive_actions_cost = relu_lo(flow [Mm3] - up_res_Mm3) * COST, and profit = ... - aggressive_actions_cost
+    const double excess      = flow * Mm3_per_m3s - up_res_Mm3;
+    const double aggr_grad   = -S->profit_grad[t] * HERSS_AGGRESSIVE_ACTIONS_COST * relu_lo_d(excess, EPS_MM3);
+
+    // tunnel flow = smin_nn(flow, up_res_Mm3 [m3/s])
+    double dfa = 0.0, dfb = 0.0;
+    smin_nn_grad(flow, up_res_Mm3 * m3s_per_Mm3, EPS_REL_FLOW, dfa, dfb);
+
+    const double flow_total_grad = flow_grad * dfa + aggr_grad * Mm3_per_m3s;
+    const double up_res_grad     = flow_grad * dfb * m3s_per_Mm3 - aggr_grad;
+
+    for (size_t g = 0; g < generators.size(); ++g) {
+        if (generators[g].action_grad.size() <= t) {
+            generators[g].action_grad.resize(S->stps, 0.0);
         }
+        generators[g].action_grad[t] += flow_total_grad * dflow_dreq * generators[g].max_discharge;
     }
 
-    if (total_action < 0.0000001) {
-        flow = 0.0;
-    } else {
-        // Calculate flow based on individual generator max discharge values
-        flow = 0.0;
-        for (size_t g = 0; g < generators.size(); ++g) {
-            if (generators[g].action.size() > t) {
-                flow += generators[g].action[t] * generators[g].max_discharge;
-            }
-        }
-    }
-
-    // Here we check the auto qmin water release in downstream connected Powerstation
-    if (auto_qmin > 0.0 && flow < auto_qmin) {
-        flow = auto_qmin;
-        S->auto_qmin_m3s[t] = flow;
-    }
-
-    double Q_Mm3 = MACRO_m3s_2_Mm3(flow, S->dt);
-
-    // We shut down production and auto_qmin if the reservoir is dry or water level below tunnel 
-    // I think we should give a minor penalty when we run action to aggresively. Just so we dont get the same value in VF. 
-    if (Q_Mm3 > up_res_Mm3) {
-        LOG_WARN("DEBUG: Aggressive action triggered at timestep " + std::to_string(t) + " for node " + std::to_string(int(idnr)) + " (" + nodename + ")");
-
-        aggressive_actions_cost = (Q_Mm3 - up_res_Mm3) * HERSS_AGGRESSIVE_ACTIONS_COST;
-        S->cost_aggressive_actions[t] = aggressive_actions_cost;
-        flow = 0.0;
-    }
-
-    return flow;
+    return up_res_grad;
 }
 //////////////////////////////////////////////////////////////////////////////////
 int Powerstation::WriteStateFile(FILE *fp) {
@@ -855,4 +1065,4 @@ double Powerstation::CalcAdjustmenCosts(void) {
     }
     return sum_cost;
 }
-//////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////

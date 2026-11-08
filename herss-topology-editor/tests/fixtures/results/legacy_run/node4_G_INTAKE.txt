@@ -1,0 +1,11 @@
+# INTAKE node 4 G_INTAKE
+# Initial_storage_Mm3 = 0.06800
+# Initial_fraction = 0.34000
+# Maximum_volume_Mm3 = 0.20000
+# Capture_capacity_m3s = 10.00000
+# Constant_hatch_release_m3s = 0.50000
+# Floodwater downstream = VANAROSEN (IDNR 3)
+yyyy mm dd hh inflow_m3s storage_Mm3 fill_fraction hatch_release_m3s captured_m3s flooding_m3s total_outflow_m3s
+2022 09 01 00 0.000 0.066 0.331 0.500 0.000 0.000 0.500
+2022 09 01 01 0.000 0.064 0.322 0.500 0.000 0.000 0.500
+2022 09 01 02 0.000 0.063 0.313 0.500 0.000 0.000 0.500

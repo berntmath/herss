@@ -1,0 +1,76 @@
+##########################################################################
+# TOPOLOGY FILE RES_CASC_B
+#
+##########################################################################
+
+#######################################################################################
+# YVATN RESERVOIR
+# NODE NODETYPE(RESERVOIR/PSTATION/CHANNEL) IDNR NAME
+NODE RESERVOIR 0 YVATN
+HRW 564.0
+LRW 554.0
+RES_PENALTY 300
+FLOODLEVEL_PENALTY 300
+# Reservoir curve points, [masl, Mm3] Curve must go below hatch_masl.
+RESERVOIR_CURVE 4
+550       0.0
+554       5
+564       17.6
+570       190
+# Overflow curve, points, downstream idnr [masl, m3s]
+OVERFLOW_CURVE 3 1
+564       0.0
+565       10.0
+570       200.0
+FAST_OVERFLOW FALSE
+# Outlet hatch downstream_nodeid, qmin_hatch, qmax_hatch, hatch_masl
+OUTLET_HATCH 2 0 100 550
+OUTLET_TUNNEL -9999
+OUTLET_AUTO_QMIN -9999
+ENDNODE
+#######################################################################################
+
+########################################################################################
+# NODE NODETYPE IDNR NAME DOWNSTREAM_NODE_IDNR
+NODE CHANNEL 1 SKJE 3
+N_CASCADE_LINRES 3
+K_TRAVELTIME_HOURS 3.89
+QMIN -9999
+ENDNODE
+########################################################################################
+
+#######################################################################################
+# KRON
+# NODE NODETYPE(RESERVOIR/PSTATION/CHANNEL) IDNR NAME
+NODE RESERVOIR 2 HJELLE
+HRW 370.0
+LRW 369.0
+RES_PENALTY 300
+FLOODLEVEL_PENALTY 300
+# Reservoir curve points, [masl, Mm3] Curve must go below hatch_masl.
+RESERVOIR_CURVE 4
+368       0.0
+369       1
+375       50
+380       100
+# Overflow curve, points, downstream idnr [masl, m3s]
+OVERFLOW_CURVE 3 3
+370       0
+371       1
+570       200.0
+FAST_OVERFLOW FALSE
+# Outlet hatch downstream_nodeid, qmin_hatch, qmax_hatch, hatch_masl
+OUTLET_HATCH -9999
+OUTLET_TUNNEL -9999
+OUTLET_AUTO_QMIN -9999
+ENDNODE
+#######################################################################################
+
+########################################################################################
+# NODE NODETYPE IDNR NAME DOWNSTREAM_NODE_IDNR
+NODE CHANNEL 3 ELV -9
+N_CASCADE_LINRES 3
+K_TRAVELTIME_HOURS 3.89
+QMIN -9999
+ENDNODE
+########################################################################################

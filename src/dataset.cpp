@@ -18,7 +18,7 @@ Dataset::Dataset(GlobalConfig *gc){
     this->stps     = gc->stps;
     this->nr_nodes = gc->nr_nodes;
     try {
-        inflow  = new double*[stps];
+        inflow  = new double*[stps];  // Using rows as timesteps, intuitively like spreadsheet 
         action = new double*[stps];
         for( size_t t = 0; t < stps; ++t ) {
             inflow[t] = new double[nr_nodes];
@@ -183,6 +183,21 @@ void Dataset::readActionsFile() {
         string tmpline = line;
         active_nodes = line_obj.calcNrCols(&tmpline);
 
+
+        // TODO: Temporary guard. action is allocated with nr_nodes slots per timestep,
+        // but the action file may have more columns (for example, multiple generators).
+        // The proper fix is to allocate by action-column count and remove the
+        // node-indexed generic action copy in Herss::prepaireSimulation().
+        if (active_nodes > nr_nodes) {
+            LOG_ERR(
+                "Action file has " + std::to_string(active_nodes) +
+                " columns, but Dataset::action has only " +
+                std::to_string(nr_nodes) + " slots per timestep. "
+                "Reading actions would write past the allocated row."
+            );
+        }
+
+
         if(active_nodes != gc->n_action_nodes_from_topology) {
             LOG_INFO("Number of action nodes in the actionsfile " + gc->actionsfile + " does not match number of action nodes in the topology file " + gc->topologyfile);
             LOG_INFO("Please revisit input");
@@ -258,11 +273,11 @@ void Dataset::readInflowFile() {
         active_nodes = line_obj.calcNrCols(&tmpline);
 
         // We have scipped the first column already 
-        if(active_nodes != (gc->nr_reservoirs)) {
+        if(active_nodes != (gc->nr_reservoirs+gc->nr_intakes)) {
             LOG_INFO("There is an error in the inflowfile " + gc->inflowfile);
             LOG_INFO("Please revisit input. ");
-            LOG_INFO("Number of columns should be number of reservoirs + 1 (date column).");
-            LOG_ERR("There is an error in the inflowfile " + gc->inflowfile + " please revisit input. Number of columns should be number of reservoirs + 1 (date column).");
+            LOG_INFO("Number of columns should be number of reservoirs + number of intakes + 1 (date column).");
+            LOG_ERR("There is an error in the inflowfile " + gc->inflowfile + " please revisit input. Number of columns should be number of reservoirs + number of intakes + 1 (date column).");
         }
 
         // Now we read in the idnrs for each coloumn and save it. 
@@ -276,18 +291,17 @@ void Dataset::readInflowFile() {
         }
     }
 
-    // Until now we only accept inflow to reservoirs.
-    // This means that the idnrs in the inflow file should match the idnrs of the reservoirs in the topology file.
-    // We check this and give an error if they do not match.
+
+    // This loop validates that every node ID listed in the inflow-file header refers to an allowed node type in the topology.
+    // We check that each node ID corresponds to a reservoir or intake node 
     for(size_t c = 0; c < active_nodes; c++) {
-        if(gc->nodetypes[idnrs[c]] != NodeType::RESERVOIR) {
-            LOG_INFO("The idnr " + std::to_string(idnrs[c]) + " in the inflowfile " + gc->inflowfile + " does not match a reservoir node in the topology file " + gc->topologyfile);
-            LOG_INFO("Please revisit input. The idnr " + std::to_string(idnrs[c]) + " in the inflowfile should match a reservoir node in the topology file.");
-            LOG_WARN("The idnr " + std::to_string(idnrs[c]) + " in the inflowfile " + gc->inflowfile + " does not match a reservoir node in the topology file " + gc->topologyfile);
-            LOG_ERR("Please revisit input. The idnr " + std::to_string(idnrs[c]) + " in the inflowfile should match a reservoir node in the topology file.");
+        if(gc->nodetypes[idnrs[c]] != NodeType::RESERVOIR  && gc->nodetypes[idnrs[c]] != NodeType::INTAKE) {
+            LOG_INFO("The idnr " + std::to_string(idnrs[c]) + " in the inflowfile " + gc->inflowfile + " does not match a reservoir or intake node in the topology file " + gc->topologyfile);
+            LOG_INFO("Please revisit input. The idnr " + std::to_string(idnrs[c]) + " in the inflowfile should match a reservoir or intake node in the topology file.");
+            LOG_WARN("The idnr " + std::to_string(idnrs[c]) + " in the inflowfile " + gc->inflowfile + " does not match a reservoir or intake node in the topology file " + gc->topologyfile);
+            LOG_ERR("Please revisit input. The idnr " + std::to_string(idnrs[c]) + " in the inflowfile should match a reservoir or intake node in the topology file.");
         }
     }
-
 
     // Now we read in each line with date in the first column and then the data, and parse the date
     for(size_t t = 0; t < this->stps; t++) {

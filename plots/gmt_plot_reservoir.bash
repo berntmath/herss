@@ -19,6 +19,7 @@
 # The top plot is the inflow series. 
 # The second plot is hatch outflow, overflow and total outflow.
 # The lowest plot is the reservoir filling level in percent of the maximum filling level.
+# Data rows are identified by their four-digit year, independent of header length.
 
 
 
@@ -39,11 +40,19 @@ INDIR="../data/res_casc_A/output/"
 # riversystem_ResCascA_output.txt
 # reservoirs_ResCascA_out.txt
 
-
 INPUT="${INDIR}/node0_RES_A.txt"
 
-#PRICE_INPUT="${INDIR}/pricefile.txt"
-#ACTION_INPUT="${INDIR}/actions.txt"
+
+for input_file in "${INPUT}" ; do
+    if [[ ! -f "${input_file}" ]]; then
+        printf 'Error: required input file not found: %s\n' "${input_file}" >&2
+        exit 1
+    fi
+done
+
+
+
+
 
 
 gmt begin "${OUTBASE}" png,pdf
@@ -67,7 +76,7 @@ gmt begin "${OUTBASE}" png,pdf
 
 
     # Plot inflow 
-    awk 'NR > 4 {
+    awk '$1 ~ /^[0-9][0-9][0-9][0-9]$/ {
         yyyy = $1; mm = $2; dd = $3; hh = 12
         printf "%04d-%02d-%02dT%02d:00 %s\n", yyyy, mm, dd, hh, $5
     }' "${INPUT}" | \
@@ -86,7 +95,7 @@ gmt begin "${OUTBASE}" png,pdf
 
 
     # Plot hatch outflow 
-    awk 'NR > 4 {
+    awk '$1 ~ /^[0-9][0-9][0-9][0-9]$/ {
         yyyy = $1; mm = $2; dd = $3; hh = 12
         printf "%04d-%02d-%02dT%02d:00 %s\n", yyyy, mm, dd, hh, $14
     }' "${INPUT}" | \
@@ -101,7 +110,7 @@ gmt begin "${OUTBASE}" png,pdf
  
 
     # Plot overflow 
-    awk 'NR > 4 {
+    awk '$1 ~ /^[0-9][0-9][0-9][0-9]$/ {
         yyyy = $1; mm = $2; dd = $3; hh = 12
         printf "%04d-%02d-%02dT%02d:00 %s\n", yyyy, mm, dd, hh, $15
     }' "${INPUT}" | \
@@ -123,7 +132,7 @@ EOF
 
 
     # Reservoir filling in percent. 
-    awk 'NR > 4 {
+    awk '$1 ~ /^[0-9][0-9][0-9][0-9]$/ {
         yyyy = $1; mm = $2; dd = $3; hh = 12
         printf "%04d-%02d-%02dT%02d:00 %s\n", yyyy, mm, dd, hh, 100*$11
     }' "${INPUT}" | \
@@ -138,7 +147,7 @@ EOF
         -Bsxa1O
 
     # Plot black dotted line at 100% filling level.
-    awk 'NR > 4 {
+    awk '$1 ~ /^[0-9][0-9][0-9][0-9]$/ {
         yyyy = $1; mm = $2; dd = $3; hh = 12
         printf "%04d-%02d-%02dT%02d:00 %s\n", yyyy, mm, dd, hh, 100
     }' "${INPUT}" | \
@@ -154,4 +163,3 @@ EOF
 
 
 gmt end show
-

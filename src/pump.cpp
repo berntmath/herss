@@ -193,6 +193,12 @@ double Pump::calcEfficiency(double q_m3s) {
     return pump_eff_curve.x2y(q_m3s) / 100.0;
 }
 ////////////////////////////////////////////////////////////////
+int Pump::Backward(size_t t) {
+    // Implement the backward pass for the pump here.
+    // This function should reverse the simulation for timestep t.
+    return 0;
+}
+////////////////////////////////////////////////////////////////
 int Pump::Simulate(size_t t) {
 
     this->dt   = S->dt;

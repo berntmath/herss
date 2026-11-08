@@ -1,0 +1,13 @@
+colorama==0.4.6
+-e git+https://github.com/berntmath/herss@de4025b559eae19a06be38e9a8272d253e78a524#egg=herss_topology_editor&subdirectory=herss-topology-editor
+iniconfig==2.3.0
+numpy==2.5.4
+packaging==26.3
+pluggy==1.6.0
+Pygments==2.21.0
+pyqtgraph==0.14.0
+PySide6==6.11.2
+PySide6_Addons==6.11.2
+PySide6_Essentials==6.11.2
+pytest==9.1.1
+shiboken6==6.11.2

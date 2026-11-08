@@ -61,7 +61,14 @@ public:
     // were logged, since warnings only go to the log file.
     size_t getWarningCount() const { return warning_count_; }
 
+    // When quiet, warnings and messages are neither counted nor written. Used by the optimizer loop, which runs the simulation
+    // hundreds of times and would otherwise write the same warnings (for example "Agressive actions") every iteration.
+    // Errors are always written, and still stop the program.
+    void setQuiet(bool quiet) { quiet_ = quiet; }
+    bool isQuiet() const { return quiet_; }
+
 private:
+    bool quiet_ = false;
     Logger() = default;
     ~Logger() = default;
     Logger(const Logger&) = delete;

@@ -1,0 +1,134 @@
+##########################################################################
+# TOPOLOGY FILE ResCascA
+# BVM 18 May, 2026
+# 
+##########################################################################
+
+#######################################################################################
+# NODE NODETYPE(RESERVOIR/PSTATION/CHANNEL) IDNR NAME
+NODE RESERVOIR 0 RES_A
+HRW 857.0
+LRW 848.0
+RES_PENALTY 300
+FLOODLEVEL_PENALTY 300
+# Reservoir curve points, [masl, Mm3] Curve must go below hatch_masl.
+RESERVOIR_CURVE 7
+847	0.0
+848	1.0
+849	2.37
+850	3.24
+857	10.0
+858	15.0
+860	500
+# Overflow curve, points, downstream idnr   [masl, m3s]
+OVERFLOW_CURVE 3 2
+857	0.0
+858	10.0
+860	200.0
+FAST_OVERFLOW FALSE
+# OUTLET_HATCH downstream_nodeid, qmin_hatch, qmax_hatch, hatch_masl
+OUTLET_HATCH 1 0.0 6.0 848.0
+OUTLET_TUNNEL -9999
+OUTLET_AUTO_QMIN -9999
+ENDNODE
+#######################################################################################
+
+#######################################################################################
+# NODE NODETYPE(RESERVOIR/PSTATION/CHANNEL) IDNR NAME
+NODE RESERVOIR 1 RES_B
+HRW 757.0
+LRW 748.0
+RES_PENALTY 300
+FLOODLEVEL_PENALTY 300
+# Reservoir curve points, [masl, Mm3] Curve must go below hatch_masl.
+RESERVOIR_CURVE 7
+747	0.0
+748	1.0
+749	2.37
+750	3.24
+757	10.0
+758	15.0
+760	500
+# Overflow curve, points, downstream idnr   [masl, m3s]
+OVERFLOW_CURVE 3 3
+757	0.0
+758	10.0
+760	200.0
+FAST_OVERFLOW FALSE
+# Outlet hatch downstream_nodeid, qmin_hatch, qmax_hatch, hatch_masl
+OUTLET_HATCH -9999
+OUTLET_TUNNEL 4
+OUTLET_AUTO_QMIN -9999
+ENDNODE
+#######################################################################################
+
+########################################################################################
+# NODE NODETYPE IDNR NAME DOWNSTREAM_NODE_IDNR
+NODE CHANNEL 2 CHAN2 5
+N_CASCADE_LINRES 3
+K_TRAVELTIME_HOURS 4
+QMIN -9999
+ENDNODE
+########################################################################################
+
+########################################################################################
+# NODE NODETYPE IDNR NAME DOWNSTREAM_NODE_IDNR
+NODE CHANNEL 3 CHAN3 5
+N_CASCADE_LINRES 3
+K_TRAVELTIME_HOURS 6
+QMIN -9999
+ENDNODE
+########################################################################################
+
+
+#######################################################################################
+NODE PSTATION 4 PSTAT_B
+DOWNLINK_IDNR 5
+# Turbine efficiency curve [M3s, %]
+NR_GENERATORS 2
+GENERATOR 0
+TURBINE_CURVE 10
+0.00	0
+1.00	50
+1.72	80
+2.27	90
+2.79	93
+3.19	93
+3.47	93
+3.67	92
+3.79	91
+4.00	88  
+GENERATOR_MAX_DISCHARGE 4.0
+GENERATOR 1
+TURBINE_CURVE 10
+0.00	0
+1.00	50
+1.72	80
+2.27	90
+2.79	93
+3.19	93
+3.47	93
+3.67	92
+3.79	91
+4.00	88  
+GENERATOR_MAX_DISCHARGE 4.0
+STATIC_GENERATOR_EFFICIENCY	0.96
+HEADLOSSCOEF	0.3
+SHARED_PENSTOCK	TRUE
+POWSTAT_MASL 690.0
+POWSTAT_MIN_DISCHARGE	1.0
+POWSTAT_STARTSTOP	2.0
+LOCAL_ENERGY_EQUIVALENT	0.11
+AUTO_QMIN -9999
+MAX_ADJUST -9999
+ENDNODE
+#######################################################################################
+
+########################################################################################
+# NODE NODETYPE IDNR NAME DOWNSTREAM_NODE_IDNR
+NODE CHANNEL 5 CHANNEL5 -9
+N_CASCADE_LINRES 4
+K_TRAVELTIME_HOURS 3
+QMIN -9999
+ENDNODE
+########################################################################################

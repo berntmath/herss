@@ -1,0 +1,11 @@
+RESERVOIR node 0 RES
+reservoir_init_fr= 0.50000  init_masl=100.000
+Filling at HRW [Mm3] = 10.00000
+Filling at LRW [Mm3] = 1.00000
+Active reservoir capacity [Mm3] = 9.00000
+yyyy mm dd hh [m3/s] [Euro/MWh] [fr] [m3/s] [m3/s] 
+yyyy mm dd hh Inflow Price Res_fr tot_inflow tot_outflow
+2022 9 1 0 1.0000 100.0000 0.5000 1.0000 2.0000 
+2022 9 1 1 1.5000 110.0000 0.5100 1.5000 2.0000 
+2022 9 1 2 2.0000 120.0000 0.5200 2.0000 2.0000 
+2022 9 2 0 2.5000 130.0000 0.5300 2.5000 2.0000 

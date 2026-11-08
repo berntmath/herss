@@ -1,0 +1,53 @@
+{
+  "schema_version": 1,
+  "herss_version": "4.0.01",
+  "system_name": "fixture",
+  "time": {
+    "start": "2022-09-01T00:00",
+    "end": "2022-09-02T00:00",
+    "timestep_seconds": [3600, 86400],
+    "steps": 4
+  },
+  "inputs": {
+    "global": "global.txt",
+    "topology": "./topology.txt",
+    "price": "./price.txt",
+    "inflow": "./inflow.txt",
+    "actions": "./actions.txt",
+    "start_state": "./start_state.txt"
+  },
+  "nodes": [
+    {
+      "id": 0,
+      "name": "G_INTAKE",
+      "type": "INTAKE",
+      "files": {"csv": "node0_G_INTAKE.csv"},
+      "downstream": [{"via": "CAPCAP_DOWN_IDNR", "to": 1}],
+      "columns": [{"name": "inflow_m3s", "unit": ""}, {"name": "storage_Mm3", "unit": ""}, {"name": "fill_fraction", "unit": ""}, {"name": "total_outflow_m3s", "unit": ""}]
+    },
+    {
+      "id": 1,
+      "name": "RES",
+      "type": "RESERVOIR",
+      "files": {"csv": "node1_RES.csv"},
+      "downstream": [{"via": "OUTLET_TUNNEL", "to": 2}],
+      "columns": [{"name": "Inflow", "unit": "m3/s"}, {"name": "Price", "unit": "Euro/MWh"}, {"name": "Res_fr", "unit": "fr"}, {"name": "tot_inflow", "unit": "m3/s"}, {"name": "tot_outflow", "unit": "m3/s"}]
+    },
+    {
+      "id": 2,
+      "name": "PS",
+      "type": "PSTATION",
+      "files": {"csv": "node2_PS.csv"},
+      "downstream": [{"via": "DOWNLINK_IDNR", "to": 3}],
+      "columns": [{"name": "Up_Inflow", "unit": "m3/s"}, {"name": "Price", "unit": "Euro/MWh"}, {"name": "Action_g0", "unit": "fr_g0"}, {"name": "tot_outflow", "unit": "m3/s"}, {"name": "Power", "unit": "MWh"}]
+    },
+    {
+      "id": 3,
+      "name": "Bjørnara",
+      "type": "CHANNEL",
+      "files": {"csv": "node3_Bjørnara.csv"},
+      "downstream": [],
+      "columns": [{"name": "Up_Inflow", "unit": "m3/s"}, {"name": "Storage_Mm3", "unit": "Mm3"}, {"name": "tot_outflow", "unit": "m3/s"}, {"name": "Qmin_Cost", "unit": "Euro"}]
+    }
+  ]
+}

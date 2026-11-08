@@ -69,7 +69,7 @@ ENDNODE
 ########################################################################################
 NODE CHANNEL 2 VANAROSEN 5
 N_CASCADE_LINRES 3
-K_TRAVELTIME_HOURS 4
+K_TRAVELTIME_HOURS 6
 QMIN -9999
 ENDNODE
 ########################################################################################
@@ -289,7 +289,7 @@ ENDNODE
 ########################################################################################
 # NODE NODETYPE IDNR NAME DOWNSTREAM_NODE_IDNR
 NODE CHANNEL 11 HYNNEKLEIV -9
-N_CASCADE_LINRES 2
+N_CASCADE_LINRES 3
 K_TRAVELTIME_HOURS 4
 QMIN -9999
 ENDNODE
