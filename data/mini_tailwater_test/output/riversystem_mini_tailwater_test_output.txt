@@ -28,6 +28,7 @@ sum_qmin_cost_Euro           = 0.000
 sum_lrw_cost_Euro            = 0.000
 sum_startstopcost_Euro       = 0.000
 sum_max_adjustment_cost      = 0.000
+sum_hatch_adjustment_cost    = 0.000
 sum_aggressive_actions_cost  = 0.000
 tot_cost_Euro                = 22.912
 tot_profit_Euro              = -4.692
