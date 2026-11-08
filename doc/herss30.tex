@@ -10,9 +10,13 @@
 \usepackage{xcolor}
 \usepackage{dirtree}
 \usepackage{booktabs}
-\usepackage{amsmath}
 \usepackage{wasysym}
 \usepackage{url}
+\usepackage{enumitem}
+\usepackage{amsmath,amssymb}
+
+\usepackage{microtype}
+
 
 
 %% \newcommand{\cmd}[1]{\texttt{#1}}
@@ -663,22 +667,38 @@
 	The \texttt{CHANNEL} node models the transport of water through a river reach between two
 	nodes. It introduces a travel time delay and attenuation of the flood wave, representing the
 	physical processes of translation and dispersion in a natural watercourse. Like the power
-	station, the channel produces no electricity and carries no economic value on the water
-	stored within it.
+	station, the channel produces no electricity. The water volume stored in the channel is included in the remaining water in the system, and hence added as economic value.
 
 	A channel node receives water from its upstream neighbour through the standard
 	\texttt{up\_inflow} mechanism and routes it to a single downstream node specified by
 	\texttt{DOWNSTREAM\_NODE\_IDNR}. If the downstream identifier is set to \texttt{-9}, the
-	channel is the terminal node of the river system (ocean) and its outflow leaves the modeled domain.
+	channel is the terminal node of the river system (ocean) and its outflow leaves the modeled domain.ccc
 
-	\subsubsection{Routing Model: Cascaded Linear Reservoirs}
+
+
+	Flow routing in HERSS can be done with one out of four different methods. 
+
+	\begin{enumerate}[label=\Alph*.]
+		\item Cascaded Linear Reservoirs 
+		\item Lagged Cascaded Linear Reservoirs
+		\item Nonlinear Natural Channel Routing 
+		\item Routing using Manning's approach
+	\end{enumerate}
+
+
+	\subsubsection{Routing Model A: Cascaded Linear Reservoirs}
 	Flow routing in HERSS is based on a series of $N$ cascaded linear reservoirs
 	(\texttt{N\_CASCADE\_LINRES}). Figure \ref{fig:linres} show a graphical representation of 
 	three linear reservoirs in series. Linear and non-linear reservoirs have been used extensively
 	in hydrology in various forms. There are numerous publications dating as early as 1930s (\cite{Zoch1934, maccarthy1938, Nash1957, Dooge1959, chow88, maidment1993, MATEO2015}). The formulation is conceptually equivalent to a Nash-cascade-type routing model \cite{Nash1957}. 
 	Each linear reservoir has a storage constant
-	$K = K_\mathrm{total} / N$, where $K_\mathrm{total}$ is the total travel time parameter
-	(\texttt{K\_TRAVELTIME\_HOURS}) distributed equally across all reservoirs. The number of
+	$K = K_\mathrm{total} / N$, where $K_\mathrm{total}$ is the mean travel time parameter
+	(\texttt{K\_TRAVELTIME\_HOURS}) distributed equally across all reservoirs.
+	A clearer name is \texttt(CASCADE\_MEAN\_TRAVEL\_TIME\_HOURS). The cascade uses this total time scale, divided evenly among its linear reservoirs; in that model it corresponds to the mean travel time, 	not a fixed delay. 
+	
+	(\texttt{A\_CASCADEDLINRES}) is the enum 
+	
+	The number of
 	cascaded reservoirs controls the shape of the unit hydrograph: a single reservoir ($N = 1$)
 	gives maximum attenuation, while increasing $N$ reduces attenuation and produces a response
 	closer to a pure time delay.
@@ -711,8 +731,6 @@
 	\label{fig:linres}
 	\end{figure}
 
-
-
 	\subsubsection{Parameters}
 
 	\begin{description}
@@ -729,6 +747,137 @@
 		The maximum allowed value is \texttt{MAX\_NR\_CASCADED\_RESERVOIRS} (currently 10).
 	\end{description}
 
+	\subsubsection{Routing Model B: Lagged Cascaded Linear Reservoirs}
+	
+	
+	\subsubsection{Routing Model C: Nonlinear Natural Channel Routing}
+	\label{sec:routing-model-c}
+
+	\paragraph{Motivation.}
+	In a natural river channel, the wave celerity is not constant: at higher discharge the flow is
+	typically deeper and faster, so a given parcel of water moves through a reach more quickly than
+	it would at low flow. This behaviour cannot be captured by a cascade of \emph{linear} reservoirs
+	(Routing Models A and B), where the residence time constant $K$ is fixed regardless of discharge.
+	Routing Model C addresses this limitation by replacing the linear storage--discharge relationship
+	with a \emph{power-law} (nonlinear) relationship, giving a simple but physically motivated
+	representation of flow-dependent travel time, broadly consistent with kinematic-wave behaviour in
+	natural channels.
+
+	\paragraph{Channel discretisation.}
+	The channel is divided into $N$ sequential sub-reaches (reaches), each modelled as an independent
+	nonlinear reservoir. The outflow of reach $i$ becomes the inflow of reach $i+1$, so that a flood
+	wave is progressively attenuated and reshaped as it propagates through the cascade, in the same
+	conceptual manner as the linear cascade used in Routing Models A and B.
+
+	\paragraph{Storage--discharge relationship.}
+	For each reach $i$, the outflow $Q_i$ is related to the water volume stored in that reach,
+	$S_i$, through a power-law relationship:
+	\begin{equation}
+		Q_i = a \, S_i^{\,b}
+		\label{eq:routingC-powerlaw}
+	\end{equation}
+	where $a$ is a reach discharge coefficient and $b$ is a dimensionless \emph{nonlinearity
+	exponent}. Equation~\eqref{eq:routingC-powerlaw} is the nonlinear counterpart of the linear
+	reservoir relation $Q = S/K$ used in Routing Models A and B, which corresponds to the special
+	case $b=1$.
+
+	\paragraph{Calibration from a reference condition.}
+	Rather than specifying $a$ directly, the model is parameterised using a physically intuitive
+	reference condition: a discharge $Q_{ref}$ and the corresponding total travel time through the
+	channel, $T_{ref}$. The equivalent total reference storage is
+	
+\begin{equation}
+	S_{ref,\text{total}} = Q_{ref} \, T_{ref} \, 3600
+	\label{eq:routingC-sreftotal}
+\end{equation}
+where $T_{ref}$ is given in hours and the factor $3600$ converts to seconds. This storage is
+distributed equally among the $N$ reaches,
+\begin{equation}
+	S_{ref} = \frac{S_{ref,\text{total}}}{N},
+	\label{eq:routingC-sref}
+\end{equation}
+and the discharge coefficient $a$ is then calibrated so that a reach holding exactly $S_{ref}$
+discharges exactly $Q_{ref}$:
+\begin{equation}
+	a = \frac{Q_{ref}}{S_{ref}^{\,b}}.
+	\label{eq:routingC-acal}
+\end{equation}
+This means the reference condition $(Q_{ref}, T_{ref})$ is not just a numerical convenience but an
+actual steady-state point that lies exactly on the calibrated storage--discharge curve.
+
+\paragraph{Model parameters.}
+Table~\ref{tab:routingC-params} summarises the four parameters required to configure Routing
+Model C.
+
+\begin{table}[htbp]
+	\centering
+	\caption{Parameters of Routing Model C (nonlinear natural channel routing).}
+	\label{tab:routingC-params}
+	\begin{tabular}{@{}llll@{}}
+		\toprule
+		Symbol & Keyword & Unit & Description \\
+		\midrule
+		$N$      & \texttt{N\_REACHES}             & --      & Number of sub-reaches in the cascade \\
+		$Q_{ref}$ & \texttt{REFERENCE\_FLOW}         & m$^3$/s & Reference discharge used for calibration \\
+		$T_{ref}$ & \texttt{REFERENCE\_TRAVEL\_TIME} & hours   & Total channel travel time at $Q_{ref}$ \\
+		$b$      & \texttt{NONLINEAR\_COEFFICIENT}  & --      & Nonlinearity exponent of the storage--discharge relation \\
+		\bottomrule
+	\end{tabular}
+\end{table}
+
+\paragraph{Effect of the nonlinearity exponent on travel time.}
+Since the residence time of a reach can be approximated as the ratio of its storage to its
+discharge, $T = S/Q$, substituting Eq.~\eqref{eq:routingC-powerlaw} gives
+\begin{equation}
+	T(Q) = \frac{S}{Q} = \frac{S^{1-b}}{a}
+	\;\;\Longleftrightarrow\;\;
+	\frac{T(Q)}{T_{ref}} = \left(\frac{Q}{Q_{ref}}\right)^{\tfrac{1-b}{b}}.
+	\label{eq:routingC-traveltime}
+\end{equation}
+Equation~\eqref{eq:routingC-traveltime} shows that the exponent $b$ directly controls how travel
+time responds to discharge:
+\begin{itemize}
+	\item $b = 1$: travel time is independent of discharge (equivalent to a linear reservoir);
+	\item $b > 1$: travel time \emph{decreases} as discharge increases, consistent with natural
+	channels where higher flows are typically faster and deeper;
+	\item $b < 1$: travel time \emph{increases} with discharge, representing backwater-type or
+	storage-dominated behaviour.
+\end{itemize}
+Typical calibrated values for natural channels lie in the range $b \approx 1.1$--$1.4$.
+
+\paragraph{Mass balance and time-stepping.}
+At each simulation time step of duration $\Delta t$, every reach $i$ is updated in sequence using
+an explicit mass balance:
+\begin{align}
+	Q_i^{out} &= \min\!\left( a \left(S_i\right)^{b},\; \frac{S_i}{\Delta t} \right)
+	\label{eq:routingC-qout} \\
+	S_i^{new} &= \max\!\left( 0,\; S_i + \left(Q_i^{in} - Q_i^{out}\right) \Delta t \right)
+	\label{eq:routingC-massbalance}
+\end{align}
+where $Q_i^{in}$ is the inflow to reach $i$ (equal to the outflow of reach $i-1$, or the channel
+inflow for $i=1$). The $\min(\cdot)$ term in Eq.~\eqref{eq:routingC-qout} prevents a reach from
+releasing more water than it currently holds within a single time step, and the $\max(0,\cdot)$
+term in Eq.~\eqref{eq:routingC-massbalance} guards against negative storage due to numerical
+truncation. Reaches are updated sequentially from the channel inflow to the outlet, with the
+outflow of one reach becoming the inflow of the next; the outflow of the final reach, $Q_N^{out}$,
+is the total outflow of the channel for that time step.
+
+\paragraph{Initial conditions.}
+At the start of a simulation, each reach is by default initialised to the reference-equilibrium
+storage $S_{ref}$ from Eq.~\eqref{eq:routingC-sref}, so that the channel begins in steady state at
+the reference discharge $Q_{ref}$. Alternatively, a hot-start may be performed by supplying the
+per-reach storage from a previously written model state, allowing a simulation to resume from an
+arbitrary (non-reference) hydraulic state.
+
+\paragraph{Limitations.}
+Routing Model C represents flow-dependent travel time through a single calibrated exponent and
+does not explicitly resolve channel geometry (width, slope, roughness) as in a full hydraulic
+model. It is best interpreted as a parsimonious, empirically calibrated approximation to
+kinematic-wave behaviour, suitable for reservoir--river system simulation where full hydraulic
+routing (e.g., Saint-Venant equations) is not required.	
+	
+\pagebreak 
+	
 	
 	\subsubsection{Estimating Travel Time for Channel Nodes}
 	For river reaches under gradually varying, subcritical flow conditions, the kinematic

@@ -13,6 +13,8 @@ Copyright (c) <2024> <Å Energi, Bernt Viggo Matheussen>
 
 #include <algorithm>
 #include <cctype>
+#include <cmath>
+#include <cstdlib>
 
 
 GlobalConfig::GlobalConfig(){
@@ -29,6 +31,8 @@ GlobalConfig::GlobalConfig(){
     outputdir          = DEFAULT_STRING_INIT;
     inputdir           = DEFAULT_STRING_INIT;
     logfilename        = DEFAULT_STRING_INIT;
+    manifest_file      = "";
+    nodefile_format    = "TXT";
 
     this->found_topologyfilename       = false;
     this->found_actionsfilename        = false;
@@ -41,6 +45,18 @@ GlobalConfig::GlobalConfig(){
     this->write_nodefiles              = false;
     this->printglobalinfo              = false;
     this->printeconomicinfo            = false;
+    this->use_autodiff                 = false;
+
+    this->adam_optimizer               = false;
+    this->adam_learning_rate           = 0.02;
+    this->adam_max_iterations          = 300;
+    this->adam_patience                = 100;
+    this->adam_grad_tolerance          = 0.0;
+    this->adam_start_from_file         = true;
+    this->adam_start_constant          = 0.0;
+    this->adam_verbose                 = false;
+    this->adam_actions_out             = "actions_optimized.txt";
+    this->adam_controls                = "GENERATORS";
 
     this->dt                 = NOT_INIT;
     this->dt_last            = NOT_INIT;  // Last time step in the simulation
@@ -85,6 +101,7 @@ void GlobalConfig::checkNrSteps() {
         keyword = line_obj.extractNextElementFromLine(&line);
         value   = line_obj.extractNextElementFromLine(&line);
         if ((!keyword.compare("RESTPRICE")) == 0) {
+            LOG_WARN("Expected keyword 'RESTPRICE' not found at the beginning of the pricefile.");
 		    LOG_ERR("There is an error in the pricefile " + this->pricefile + " please revisit input");
 
         }
@@ -115,7 +132,11 @@ void GlobalConfig::SetDirectoriesAndFilenames() {
     actionsfile     = inputdir + actionsfile;
     start_statefile = inputdir + start_statefile;
     out_statefile   = outputdir + out_statefile;
+    adam_actions_out = outputdir + adam_actions_out;
     outputfile      = outputdir + outputfile;
+    if(!manifest_file.empty()) {
+        manifest_file = outputdir + manifest_file;
+    }
 }
 ///////////////////////////////////////////////////////////////////////////////////////////////////////
 void GlobalConfig::DiagnoseTopologyFile() {
@@ -130,6 +151,8 @@ void GlobalConfig::DiagnoseTopologyFile() {
     this->nr_reservoirs = 0; 
     this->nr_channels   = 0;
     this->nr_pumps      = 0;
+    this->nr_intakes    = 0;
+
 
 	myfile.open(this->topologyfile.c_str() );
 
@@ -168,12 +191,15 @@ void GlobalConfig::DiagnoseTopologyFile() {
                     this->nr_pumps++;
                     nodetypes[this->nr_nodes] = NodeType::PUMP;
                 }
+                if (value.compare("INTAKE") == 0) {
+                    this->nr_intakes++;
+                    nodetypes[this->nr_nodes] = NodeType::INTAKE;
+                }
                 this->nr_nodes++;
             }
         }
     }
     myfile.close();
-
 };
 ///////////////////////////////////////////////////////////////////////////////////////////////////////
 void GlobalConfig::Diagnose() { 
@@ -189,6 +215,7 @@ void GlobalConfig::Diagnose() {
     this->nr_reservoirs = 0; 
     this->nr_channels   = 0;
     this->nr_pumps      = 0;
+    this->nr_intakes    = 0;
 
     topoparser.loadFile(this->topologyfile);
 
@@ -224,6 +251,10 @@ void GlobalConfig::Diagnose() {
                 this->nr_pumps++;
                 // A PUMP has only one action node, and this step counts 
                 this->n_action_nodes_from_topology++;
+            }
+            if (value.compare("INTAKE") == 0) {
+                nodetypes[this->nr_nodes] = NodeType::INTAKE;
+                this->nr_intakes++;
             }
             this->nr_nodes++;
         }
@@ -295,7 +326,6 @@ void GlobalConfig::Diagnose() {
     //-------------------------------------------------------------------------------
 
 
-
     //-------------------------------------------------------------------------------
     // Read header of inflow file and get idnrs. 
 	myfile.open(this->inflowfile.c_str() );
@@ -310,34 +340,92 @@ void GlobalConfig::Diagnose() {
 
     if ((!keyword.compare("Date_NodeID")) == 0) {
 		LOG_ERR("There is an error in the inflowfile file " + this->inflowfile + " please revisit input");
-		exit(EXIT_FAILURE);
     }
-    
+
     tmpline = line;
     this->n_inflow_nodes = line_obj.calcNrCols(&tmpline);
 
-    // The number of inflow nodes must match the number of reservoirs in the topology file.
-    if(this->n_inflow_nodes != this->nr_reservoirs) {
-        LOG_INFO("Number of inflow nodes in the inflowfile " + this->inflowfile + " does not match number of reservoirs in the topology file " + this->topologyfile);
+    // The number of inflow nodes must match the number of reservoirs+ intakes in the topology file.
+    if(this->n_inflow_nodes != (this->nr_reservoirs + this->nr_intakes)) {
+        LOG_INFO("Number of inflow nodes in the inflowfile " + this->inflowfile + " does not match number of reservoirs+ intakes in the topology file " + this->topologyfile);
         LOG_INFO("Number of inflow nodes in the inflowfile: " + std::to_string(this->n_inflow_nodes));
-        LOG_INFO("Number of reservoirs in the topology file: " + std::to_string(this->nr_reservoirs));
+        LOG_INFO("Number of reservoirs+ intakes in the topology file: " + std::to_string(this->nr_reservoirs + this->nr_intakes));
         LOG_INFO("Please revisit input");
-        LOG_WARN("Number of inflow nodes in the inflowfile " + this->inflowfile + " does not match number of reservoirs in the topology file " + this->topologyfile);
+        LOG_WARN("Number of inflow nodes in the inflowfile " + this->inflowfile + " does not match number of reservoirs+ intakes in the topology file " + this->topologyfile);
         LOG_WARN("Number of inflow nodes in the inflowfile: " + std::to_string(this->n_inflow_nodes));
-        LOG_WARN("Number of reservoirs in the topology file: " + std::to_string(this->nr_reservoirs));
+        LOG_WARN("Number of reservoirs+ intakes in the topology file: " + std::to_string(this->nr_reservoirs + this->nr_intakes));
         LOG_ERR("Please revisit input");
     }
 
-    // Now we read in the idnrs for each coloumn and save it. 
-    for(size_t c = 0; c < this->n_inflow_nodes; c++) {
+
+    for (size_t c = 0; c < this->n_inflow_nodes; ++c) {
         value = line_obj.extractNextElementFromLine(&line);
-        inflows_idnrs[c] = stoi(value);
-        // cout << "Checking inflow node idnr " << inflows_idnrs[c] << " against reservoir idnrs in topology file...\n";
+
+        size_t parsed_chars = 0;
+        long long parsed_idnr;
+
+        try {
+            parsed_idnr = std::stoll(value, &parsed_chars);
+        } catch (const std::exception&) {
+            LOG_ERR("Invalid inflow node ID '" + value +
+                    "' in " + this->inflowfile +
+                    "; expected a non-negative integer ID.");
+            return;
+        }
+
+        // Reject tokens such as "2.5" or "2abc", which stoll can partially parse.
+        if (parsed_chars != value.size()) {
+            LOG_ERR("Invalid inflow node ID '" + value +
+                    "' in " + this->inflowfile +
+                    "; expected an integer ID.");
+            return;
+        }
+
+        if (parsed_idnr < 0 ||
+            static_cast<unsigned long long>(parsed_idnr) >= this->nr_nodes) {
+            LOG_ERR("Inflow node ID '" + value +
+                    "' is outside the valid topology range.");
+            return;
+        }
+
+        const size_t idnr = static_cast<size_t>(parsed_idnr);
+        if (nodetypes[idnr] != NodeType::RESERVOIR &&
+            nodetypes[idnr] != NodeType::INTAKE) {
+                LOG_ERR("Inflow node ID '" + value + "' does not refer to a reservoir or intake.");
+                return;
+        }
+
+        inflows_idnrs[c] = idnr;
     }
+
+
+    // // Now we read in the idnrs for each coloumn and save it. 
+    // for(size_t c = 0; c < this->n_inflow_nodes; c++) {
+    //     value = line_obj.extractNextElementFromLine(&line);
+    //     inflows_idnrs[c] = stoi(value);
+    // }
+  
     myfile.close();
     //-------------------------------------------------------------------------------
 
-
+}
+///////////////////////////////////////////////////////////////////////////////////////////////////////
+// Reads a number from the global file and checks it. A bad value stops HERSS with a message.
+static double globalFileNumber(const string &globalfile, const string &keyword, const string &value) {
+    char *end = NULL;
+    const double d = std::strtod(value.c_str(), &end);
+    if(value.empty() || end == value.c_str() || *end != '\0' || !std::isfinite(d)) {
+        LOG_INFO("The value of " + keyword + " in the global configfile " + globalfile + " must be a number, got: '" + value + "'");
+        LOG_ERR("Invalid value for " + keyword + " in the global configfile " + globalfile + ": '" + value + "'");
+    }
+    return d;
+}
+static bool globalFileBool(const string &globalfile, const string &keyword, const string &value) {
+    if(value != "TRUE" && value != "FALSE") {
+        LOG_INFO("The value of " + keyword + " in the global configfile " + globalfile + " must be TRUE or FALSE, got: '" + value + "'");
+        LOG_ERR("Invalid value for " + keyword + " in the global configfile " + globalfile + ": '" + value + "'");
+    }
+    return value == "TRUE";
 }
 ///////////////////////////////////////////////////////////////////////////////////////////////////////
 void GlobalConfig::readGlobalFile() {
@@ -402,6 +490,83 @@ void GlobalConfig::readGlobalFile() {
                 found_ok_keyword = true;
             }
 
+
+            if (keyword.compare("AUTODIFF") == 0) {
+                this->use_autodiff = (value == "TRUE");
+                found_ok_keyword = true;
+            }
+
+            // HERSS-AD: Adam optimization of the generator actions
+            if (keyword.compare("ADAM_OPTIMIZER") == 0) {
+                this->adam_optimizer = globalFileBool(globalfile, keyword, value);
+                found_ok_keyword = true;
+            }
+
+            if (keyword.compare("LEARNING_RATE") == 0) {
+                this->adam_learning_rate = globalFileNumber(globalfile, keyword, value);
+                if(this->adam_learning_rate <= 0.0) {
+                    LOG_ERR("LEARNING_RATE must be positive in the global configfile " + globalfile);
+                }
+                found_ok_keyword = true;
+            }
+
+            if (keyword.compare("MAX_ITERATIONS") == 0) {
+                const double d = globalFileNumber(globalfile, keyword, value);
+                if(d < 1.0 || d != std::floor(d)) {
+                    LOG_ERR("MAX_ITERATIONS must be a positive integer in the global configfile " + globalfile);
+                }
+                this->adam_max_iterations = size_t(d);
+                found_ok_keyword = true;
+            }
+
+            if (keyword.compare("PATIENCE") == 0) {
+                const double d = globalFileNumber(globalfile, keyword, value);
+                if(d < 1.0 || d != std::floor(d)) {
+                    LOG_ERR("PATIENCE must be a positive integer in the global configfile " + globalfile);
+                }
+                this->adam_patience = size_t(d);
+                found_ok_keyword = true;
+            }
+
+            if (keyword.compare("GRAD_TOLERANCE") == 0) {
+                this->adam_grad_tolerance = globalFileNumber(globalfile, keyword, value);
+                if(this->adam_grad_tolerance < 0.0) {
+                    LOG_ERR("GRAD_TOLERANCE cannot be negative in the global configfile " + globalfile);
+                }
+                found_ok_keyword = true;
+            }
+
+            if (keyword.compare("START_ACTIONS") == 0) {
+                if(value == "FILE") {
+                    this->adam_start_from_file = true;
+                } else {
+                    this->adam_start_constant = globalFileNumber(globalfile, keyword, value);
+                    if(this->adam_start_constant < 0.0 || this->adam_start_constant > 1.0) {
+                        LOG_ERR("START_ACTIONS must be FILE or a number in [0,1] in the global configfile " + globalfile);
+                    }
+                    this->adam_start_from_file = false;
+                }
+                found_ok_keyword = true;
+            }
+
+            if (keyword.compare("OPTIMIZED_ACTIONFILE") == 0) {
+                this->adam_actions_out = value;
+                found_ok_keyword = true;
+            }
+
+            if (keyword.compare("ADAM_VERBOSE") == 0) {
+                this->adam_verbose = globalFileBool(globalfile, keyword, value);
+                found_ok_keyword = true;
+            }
+
+            if (keyword.compare("OPTIMIZE_CONTROLS") == 0) {
+                if(value != "GENERATORS" && value != "HATCH" && value != "ALL") {
+                    LOG_ERR("OPTIMIZE_CONTROLS must be GENERATORS, HATCH or ALL in the global configfile " + globalfile);
+                }
+                this->adam_controls = value;
+                found_ok_keyword = true;
+            }
+
             if (keyword.compare("SYSTEMNAME") == 0) {
                 this->systemname = value;
                 this->found_systemname = true;                
@@ -447,6 +612,19 @@ void GlobalConfig::readGlobalFile() {
 
             if(keyword.compare("OUTPUTDIR") == 0) {
                 this->outputdir = value;
+                found_ok_keyword = true;
+            }
+
+            if(keyword.compare("MANIFEST_FILE") == 0) {
+                this->manifest_file = value;
+                found_ok_keyword = true;
+            }
+
+            if(keyword.compare("NODEFILE_FORMAT") == 0) {
+                if(value != "TXT" && value != "CSV" && value != "BOTH") {
+                    LOG_ERR("NODEFILE_FORMAT must be TXT, CSV or BOTH in the global configfile " + this->globalfile + ", got: " + value);
+                }
+                this->nodefile_format = value;
                 found_ok_keyword = true;
             }
 
@@ -556,13 +734,18 @@ void GlobalConfig::printGlobalInfo() {
     printf("TOPOLOGYFILE        %s\n", this->topologyfile.c_str() );
     printf("STARTSTATEFILE      %s\n", this->start_statefile.c_str() );
     printf("OUTSTATEFILE        %s\n", this->out_statefile.c_str() );
+
     printf("NR_NODES            %d\n", int(this->nr_nodes));
     printf("NR_RESERVOIRS       %d\n", int(this->nr_reservoirs));
     printf("NR_CHANNELS         %d\n", int(this->nr_channels));
     printf("NR_PSTATIONS        %d\n", int(this->nr_pstations));
+    printf("NR_INTAKES          %d\n", int(this->nr_intakes));
+    
     printf("STPS                %d\n", int(this->stps));
     printf("WRITE_NODEFILES     %d\n", this->write_nodefiles ); 
     printf("OUTPUTDIR           %s\n", this->outputdir.c_str() );
+    printf("NODEFILE_FORMAT     %s\n", this->nodefile_format.c_str() );
+    printf("MANIFEST_FILE       %s\n", this->manifest_file.c_str() );
     printf("n_action_nodes = %lu  [ ", n_action_nodes);
 
     if(n_action_nodes != NOT_INIT) {

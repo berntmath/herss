@@ -15,7 +15,7 @@ CC   = g++
 
 OBJ  =  main.o node.o globalconfig.o line.o reservoir.o dataset.o qmin.o \
 		powerstation.o channel.o riversystem.o scenario.o herss.o arraycurve.o \
-		xtime.o topoparser.o logger.o cascadedreservoirs.o pump.o
+		xtime.o topoparser.o logger.o cascadedreservoirs.o pump.o intake.o outputformats.o optimizer.o
 INCS =  -I.
 BIN  = herss.exe
 LIB = herss.so
@@ -50,7 +50,7 @@ CFLAGS = $(INCS) -Wall -O3 -pedantic -fPIC -march=native
 
 # Memory check with Valgrind
 # valgrind --leak-check=full --show-leak-kinds=all ../herss.exe global_utahps_hourly.txt
-CFLAGS = $(INCS) -Wall -g -pedantic -fPIC
+#CFLAGS = $(INCS) -Wall -g -pedantic -fPIC
 
 
 # Profiling with gprof (dont use -O3 when compiling for profiling, as it can inline functions and make profiling results less accurate)
@@ -103,7 +103,7 @@ gtest_main.o:
 	$(CC) $(TEST_CFLAGS) -c $< -o $@
 
 
-main.o: main.cpp herss.h logger.h
+main.o: main.cpp herss.h logger.h optimizer.h
 	$(CC) $(CFLAGS) -c main.cpp -o main.o
 
 node.o: node.cpp herss.h
@@ -124,7 +124,7 @@ dataset.o: dataset.cpp herss.h
 powerstation.o: powerstation.cpp herss.h
 	$(CC) $(CFLAGS) -c powerstation.cpp -o powerstation.o
 
-channel.o: channel.cpp herss.h
+channel.o: channel.cpp herss.h naturalchannel.h manningchannel.h smoothing.h
 	$(CC) $(CFLAGS) -c channel.cpp -o channel.o
 
 riversystem.o: riversystem.cpp herss.h
@@ -157,3 +157,11 @@ cascadedreservoirs.o: cascadedreservoirs.cpp herss.h logger.h
 pump.o: pump.cpp herss.h logger.h
 	$(CC) $(CFLAGS) -c pump.cpp -o pump.o
 
+intake.o: intake.cpp herss.h
+	$(CC) $(CFLAGS) -c intake.cpp -o intake.o
+
+outputformats.o: outputformats.cpp outputformats.h herss.h
+	$(CC) $(CFLAGS) -c outputformats.cpp -o outputformats.o
+
+optimizer.o: optimizer.cpp optimizer.h herss.h logger.h
+	$(CC) $(CFLAGS) -c optimizer.cpp -o optimizer.o

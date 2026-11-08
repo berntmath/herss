@@ -84,6 +84,11 @@ Herss::~Herss(){
 // It is used when we instansiate the herss object from scratch
 void Herss::ReadTopologyFile(string filename) {
 
+
+    cout << "Reading topology file: " << gc->topologyfile << endl;
+    
+
+
     for(size_t n = 0; n < gc->nr_nodes; n++) {
         rs->nodes[n]->ReadNodeData(gc->topologyfile);
         rs->nodes[n]->S = this->scen[n];
@@ -180,11 +185,24 @@ int Herss::prepaireSimulation(Dataset *data) {
                 rs->nodes[node_id]->idnr = node_id;   
                 rs->nodes[node_id]->nodetype = NodeType::PUMP;
             }
+            else if (value == "INTAKE") {
+                str_idnr = line_obj.extractNextElementFromLine(&line);
+                str_name = line_obj.extractNextElementFromLine(&line);
+                size_t node_id = std::stoul(str_idnr);
+                if (node_id >= gc->nr_nodes) {
+                    LOG_ERR("Error: Node ID " + std::to_string(node_id) + " exceeds the number of nodes (" + std::to_string(gc->nr_nodes) + ")");
+                }
+                rs->nodes[node_id]->nodename = str_name;
+                rs->nodes[node_id]->idnr = node_id;   
+                rs->nodes[node_id]->nodetype = NodeType::INTAKE;
+            }
             else {
-                LOG_ERR("ERROR: Invalid nodetype in topology file it must be RESERVOIR, PSTATION, CHANNEL or PUMP" + gc->topologyfile);
+                LOG_ERR("ERROR: Invalid nodetype in topology file it must be RESERVOIR, PSTATION, CHANNEL, PUMP or INTAKE" + gc->topologyfile);
             }
         }
     }
+
+
 
 
     for(size_t n = 0; n < gc->nr_nodes; n++) {
@@ -228,6 +246,13 @@ int Herss::prepaireSimulation(Dataset *data) {
     }
 
     SetPointers();
+
+
+
+    for(size_t r = 0; r < gc->nr_intakes; r++) {
+        rs->intakes[r].InitIntake();
+    }
+
 
     // BVM June 2026.
     // Make sure actions for RESERVOIRS are set correctly
@@ -411,6 +436,35 @@ void Herss::SetPointers() {
             }
         }
 
+        //-------------------------------------------------------------------------------
+        if( rs->nodes[n]->nodetype == NodeType::INTAKE) {
+
+
+            Intake* intake = static_cast<Intake*>(rs->nodes[n]);
+
+            if (intake->floodwater_down_idnr >= gc->nr_nodes ||
+                intake->capcap_down_idnr >= gc->nr_nodes ||
+                intake->hatch_release_down_idnr >= gc->nr_nodes) {
+                LOG_ERR("Invalid or missing downstream node ID for INTAKE " + std::to_string(n) + " (" + intake->nodename + ")");
+            }
+
+            intake->ptr_downstream_floodwater_node = rs->nodes[intake->floodwater_down_idnr];
+
+            intake->ptr_downstream_capcap_node = rs->nodes[intake->capcap_down_idnr];
+
+            intake->ptr_downstream_hatch_release_node = rs->nodes[intake->hatch_release_down_idnr];
+
+            // I am not sure if we need this. Come back to it later 
+            //if(rs->nodes[n]->downstream_node_in_use) {
+            //    rs->nodes[n]->ptr_downstream_node = rs->nodes[rs->nodes[n]->downstream_idnr];
+            //}
+
+        }
+        //-------------------------------------------------------------------------------
+
+
+
+
         // TAILWATER_IDNR: let the tailwater reservoir push its start/end MASL into the station.
         if( rs->nodes[n]->nodetype == NodeType::PSTATION ) {
             Powerstation* ps = static_cast<Powerstation*>(rs->nodes[n]);
@@ -426,7 +480,6 @@ void Herss::SetPointers() {
 }
 /////////////////////////////////////////////////////////////////////
 int Herss::WriteStateFile() {
-
     FILE *fp;
     if((fp = fopen(gc->out_statefile.c_str() ,"w"))==NULL) {
         LOG_ERR("Cannot open file " + gc->out_statefile);
@@ -498,6 +551,81 @@ double Herss::GetAction(size_t node_idnr, size_t gen_idnr, size_t t) {
     // Old code before multi-generator support  
     // return rs->nodes[node_idnr]->S->action[t][node_idnr];
 
+}
+/////////////////////////////////////////////////////////////////////
+// HERSS-AD: backward pass. Run Simulate() and rs->CalcVF(restprice) first.
+int Herss::Backward() {
+    return rs->Backward(this);
+}
+/////////////////////////////////////////////////////////////////////
+// d(ValueFunction)/d(action[t]), the same indexing as GetAction. Run Backward() first.
+double Herss::GetActionGrad(size_t node_idnr, size_t gen_idnr, size_t t) {
+
+    if (node_idnr >= gc->nr_nodes || t >= stps) {
+        LOG_ERR("GetActionGrad: node_idnr " + std::to_string(node_idnr) + " or t " + std::to_string(t) + " out of range");
+    }
+
+    if (rs->nodes[node_idnr]->nodetype == NodeType::PSTATION) {
+        Powerstation* ps = static_cast<Powerstation*>(rs->nodes[node_idnr]);
+        if (gen_idnr >= ps->generators.size()) {
+            LOG_ERR("GetActionGrad: gen_idnr " + std::to_string(gen_idnr) + " out of range");
+        }
+        if (t >= ps->generators[gen_idnr].action_grad.size()) {
+            LOG_ERR("GetActionGrad: no gradient available, run Backward() first");
+        }
+        return ps->generators[gen_idnr].action_grad[t];
+    }
+    else if (rs->nodes[node_idnr]->nodetype == NodeType::RESERVOIR) {
+        Reservoir* res = static_cast<Reservoir*>(rs->nodes[node_idnr]);
+        if (!res->outlet_hatch_in_use) {
+            LOG_ERR("GetActionGrad: RESERVOIR node " + std::to_string(node_idnr) + " has no hatch outlet");
+        }
+        return res->S->action_grad[t];
+    }
+    else if (rs->nodes[node_idnr]->nodetype == NodeType::PUMP) {
+        LOG_ERR("GetActionGrad: Pump::Backward is not implemented yet, node " + std::to_string(node_idnr));
+    }
+    else {
+        LOG_ERR("GetActionGrad: node " + std::to_string(node_idnr) + " is not a PSTATION or RESERVOIR");
+    }
+
+    return -9.0;
+}
+/////////////////////////////////////////////////////////////////////
+std::vector<double> Herss::GetActionGradSeries(size_t node_idnr, size_t gen_idnr) {
+    std::vector<double> g(stps);
+    for (size_t t = 0; t < stps; t++) {
+        g[t] = GetActionGrad(node_idnr, gen_idnr, t);
+    }
+    return g;
+}
+/////////////////////////////////////////////////////////////////////
+// up_inflow_grad is d(VF)/d(water arriving at the node), and the local inflow adds to the same volume in a reservoir.
+double Herss::GetInflowGrad(size_t t, size_t node_idnr) {
+
+    if (node_idnr >= gc->nr_nodes || t >= stps) {
+        LOG_ERR("GetInflowGrad: node_idnr " + std::to_string(node_idnr) + " or t " + std::to_string(t) + " out of range");
+    }
+    if (rs->nodes[node_idnr]->nodetype != NodeType::RESERVOIR) {
+        LOG_ERR("GetInflowGrad: node " + std::to_string(node_idnr) + " is not a RESERVOIR");
+    }
+    return rs->nodes[node_idnr]->S->up_inflow_grad[t];
+}
+/////////////////////////////////////////////////////////////////////
+double Herss::GetReservoir_Init_Mm3_grad(size_t node_idnr) {
+
+    if (node_idnr >= gc->nr_nodes || rs->nodes[node_idnr]->nodetype != NodeType::RESERVOIR) {
+        LOG_ERR("GetReservoir_Init_Mm3_grad: node " + std::to_string(node_idnr) + " is not a RESERVOIR");
+    }
+    return rs->reservoirs[rs->nodes[node_idnr]->reservoir_idnr].res_Mm3_init_grad;
+}
+/////////////////////////////////////////////////////////////////////
+// init volume = LRW volume + fraction * (HRW volume - LRW volume)
+double Herss::GetReservoir_Init_fr_grad(size_t node_idnr) {
+
+    const double g_Mm3 = GetReservoir_Init_Mm3_grad(node_idnr);
+    const Reservoir &res = rs->reservoirs[rs->nodes[node_idnr]->reservoir_idnr];
+    return g_Mm3 * (res.filling_at_hrw_Mm3 - res.filling_at_lrw_Mm3);
 }
 /////////////////////////////////////////////////////////////////////
 void Herss::PrintActions() {
@@ -738,6 +866,7 @@ int Herss::Simulate() {
         rs->nodes[n]->upstream_remaining_active_Mm3 = 0.0;
     }
 
+
     // DO NOT CHANGE THIS AROUND - IT EFFECTS THE RESULTS (OVE CHANGED IT TO HANDLE VARIABLE TIMESTEPS)
     for( size_t t = 0; t < stps; ++t ) {
         // Set current timestep for ArrayCurve error reporting
@@ -756,6 +885,7 @@ int Herss::Simulate() {
             rs->nodes[n]->Simulate(t);
         }
         
+
         // Terje Sandø, pump-station work, August 2026.
         // Pump power and cost require average source and target reservoir levels,
         // so calculate them after all nodes have completed this timestep.
@@ -774,7 +904,6 @@ int Herss::Simulate() {
         }
     }
 
-
     // We need to update the remaining water in the node pointers (up, down)
     // Note that in reservoirs the water below LRW is DEAD.
     // It needs to be accounted for in the waterbalance calulations, 
@@ -790,6 +919,7 @@ int Herss::Simulate() {
 
         }
     }
+
 
     return 0;
 }
@@ -811,6 +941,7 @@ int Herss::GlobalWaterBalance(){
     for(size_t n = 0; n < gc->nr_nodes; n++) {
         rs->end_water_Mm3 += rs->nodes[n]->GetEndWater_Mm3();
     }
+
     rs->inflow_volume_Mm3 = 0.0;
     for(size_t t=0; t < gc->stps; t++) {
         int current_dt = getDeltaT(t);  // Use variable timestep
@@ -826,6 +957,7 @@ int Herss::GlobalWaterBalance(){
         int current_dt = getDeltaT(t);  // Use variable timestep
         rs->outgoing_Mm3 += MACRO_m3s_2_Mm3(rs->nodes[gc->nr_nodes-1]->S->tot_outflow[t], current_dt);
     }
+
     rs->waterbalance = rs->start_water_Mm3 + rs->inflow_volume_Mm3 - rs->end_water_Mm3 - rs->outgoing_Mm3;
     if(WATERBALANCE_WARNINGS) { 
         LOG_INFO("-----------------------------------------");

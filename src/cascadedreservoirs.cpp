@@ -91,6 +91,30 @@ double CascadedReservoirs::route(double q_in_m3s, double dt_seconds) {
     return q_for_next; // average outlet discharge over the step
 };
 //------------------------------------------------------------------------------------------------
+// Per linear reservoir, with f = exp(-dt/k):
+//   S_new = f * S_old + k (1 - f) * q_in
+//   q_out = (S_old + q_in dt - S_new) / dt = ((1 - f) * S_old + (dt - k (1 - f)) * q_in) / dt
+// The clipping of q_out at zero in routeOneReservoir only removes rounding errors (the expression is >= 0), so it has no gradient.
+void CascadedReservoirs::routeBackward(double q_out_grad, double dt_seconds, std::vector<double> &storage_grad, double &q_in_grad) {
+
+    if(storage_grad.size() != linreservoirs.size()) {
+        storage_grad.assign(linreservoirs.size(), 0.0);
+    }
+
+    const double f  = std::exp(-dt_seconds / k_res_seconds);
+    const double kf = k_res_seconds * (1.0 - f);
+    const double a  = (1.0 - f) / dt_seconds;          // d(q_out)/d(S_old)
+    const double b  = (dt_seconds - kf) / dt_seconds;  // d(q_out)/d(q_in)
+
+    double q_grad = q_out_grad;                        // Adjoint of the flow leaving linear reservoir i, then entering it
+    for (size_t i = linreservoirs.size(); i-- > 0; ) {
+        const double S_new_grad = storage_grad[i];
+        storage_grad[i] = a * q_grad + f * S_new_grad;
+        q_grad          = b * q_grad + kf * S_new_grad;
+    }
+    q_in_grad = q_grad;
+}
+//------------------------------------------------------------------------------------------------
 ReservoirStepResult CascadedReservoirs::routeOneReservoir(
     double storage_old_m3, double q_in_m3s, double k_seconds, double dt_seconds) {
 

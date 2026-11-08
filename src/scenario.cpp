@@ -85,6 +85,17 @@ Scenario::Scenario(size_t stps, size_t dt, size_t idnr){
         Power           = new double[stps];
         EstimatedEEKV   = new double[stps];
 
+        profit_grad     = new double[stps];
+        Power_grad      = new double[stps];
+        res_Mm3_grad    = new double[stps];
+        action_grad     = new double[stps];
+        res_masl_grad   = new double[stps];
+        Hbrutto_grad    = new double[stps];
+        up_inflow_grad  = new double[stps];
+
+
+
+
         tunnelflow_m3s  = new double[stps];
         hatchflow_m3s   = new double[stps];
         overflow_m3s    = new double[stps];
@@ -93,10 +104,15 @@ Scenario::Scenario(size_t stps, size_t dt, size_t idnr){
         pump_in_m3s     = new double[stps];
         pump_out_m3s    = new double[stps];
         channel_storage_Mm3 = new double[stps];
+
+        intake_storage_Mm3  = new double[stps]; 
+        intake_hatchflow_m3s     = new double[stps];
+        intake_captured_flow_m3s = new double[stps];
+        intake_flooding_m3s      = new double[stps];
+        
         adjust_cost         = new double[stps];
 
         cost_aggressive_actions = new double[stps];
-
 
         year            = new int[stps];
         month           = new int[stps];
@@ -146,6 +162,14 @@ Scenario::Scenario(size_t stps, size_t dt, size_t idnr){
 
         EstimatedEEKV[t]   = NOT_INIT;
 
+        profit_grad[t]     = 0.0;
+        Power_grad[t]      = 0.0;
+        res_Mm3_grad[t]    = 0.0;
+        action_grad[t]     = 0.0;
+        res_masl_grad[t]   = 0.0;
+        Hbrutto_grad[t]    = 0.0;
+        up_inflow_grad[t]  = 0.0;
+
         tunnelflow_m3s[t]  = NOT_INIT;
         hatchflow_m3s[t]   = NOT_INIT;
         overflow_m3s[t]    = NOT_INIT;
@@ -154,6 +178,12 @@ Scenario::Scenario(size_t stps, size_t dt, size_t idnr){
         pump_in_m3s[t]     = 0.0;
         pump_out_m3s[t]    = 0.0;
         channel_storage_Mm3[t] = NOT_INIT;
+
+        intake_storage_Mm3[t] = NOT_INIT;
+        intake_hatchflow_m3s[t]     = NOT_INIT;
+        intake_captured_flow_m3s[t] = NOT_INIT;
+        intake_flooding_m3s[t]      = NOT_INIT;
+
     }
 }
 ///////////////////////////////////////////////////////////////////////////////
@@ -200,8 +230,39 @@ Scenario::~Scenario(){
     delete [] pump_in_m3s;     // Terje Sandø, pump-station work, July 2026.
     delete [] pump_out_m3s;    // Terje Sandø, pump-station work, July 2026.
     delete [] channel_storage_Mm3;
+
+    delete [] profit_grad;
+    delete [] Power_grad;
+    delete [] res_Mm3_grad;
+    delete [] action_grad;
+    delete [] res_masl_grad;
+    delete [] Hbrutto_grad;
+    delete [] up_inflow_grad;
+
+    delete [] intake_storage_Mm3;
+    delete [] intake_hatchflow_m3s;
+    delete [] intake_captured_flow_m3s;
+    delete [] intake_flooding_m3s;
+
     delete [] adjust_cost;
     delete [] cost_aggressive_actions;  
 
 }
 ///////////////////////////////////////////////////////////////////////////////
+
+void Scenario::ClearGradients() {
+
+    for (size_t t = 0; t < stps; ++t) {
+        profit_grad[t]     = 0.0;
+        Power_grad[t]      = 0.0;
+        res_Mm3_grad[t]    = 0.0;
+        action_grad[t]     = 0.0;
+        res_masl_grad[t]   = 0.0;
+        Hbrutto_grad[t]    = 0.0;
+        up_inflow_grad[t]  = 0.0;
+    }
+}
+
+
+
+

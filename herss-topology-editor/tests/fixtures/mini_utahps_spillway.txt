@@ -1,0 +1,75 @@
+##########################################################################
+# TOPOLOGY FILE Upper Tovdalen Hydro Power System (uTAHPS)
+# BVM 1 Mar, 2024
+# 
+# qmin[m3/s]  start_data[dd.mm] end_data[dd.mm] QMIN_COST[Euro]
+# QMIN 0.1 01.10 15.06 4.0
+##########################################################################
+
+#######################################################################################
+# HJELLEVATN RESERVOIR
+# NODE NODETYPE(RESERVOIR/PSTATION/CHANNEL) IDNR NAME
+NODE RESERVOIR 0 HJELLE
+HRW 757.0
+LRW 748.0
+RES_PENALTY 300
+FLOODLEVEL_PENALTY 300
+# Reservoir Geometry, scipping the reservoir curve. specifying the geometry of a trapezoide
+RESERVOIR_GEOMETRY
+WIDTH_M 1000
+LENGTH_M 1000
+# Angle of the sides of the reservoir, in degrees. 
+# 0 < THETA < 90, close to zero is very flat valley, 
+# close to 90 is almost rectangular cross-section
+THETA 20
+BOTTOM_MASL 745.0
+# SPILLWAY  downstream_idnr  C  L  spillway_level_masl
+SPILLWAY 2 2.1 50.0 757.0
+FAST_OVERFLOW FALSE
+# Outlet hatch downstream_nodeid, qmin_hatch, qmax_hatch, hatch_masl
+OUTLET_HATCH -9999
+OUTLET_TUNNEL 1
+OUTLET_AUTO_QMIN -9999
+ENDNODE
+#######################################################################################
+
+#######################################################################################
+# SVOLETJONN POWERSTATION HJELLEVATN IS INTAKE 
+NODE PSTATION 1 SVOLETJONN
+DOWNLINK_IDNR 2
+# Turbine efficiency curve [M3s, %]
+NR_GENERATORS 1
+GENERATOR 0
+UNIFORM_NORMALIZED_CURVE 11
+0.0 0.0 
+0.1	50.0
+0.2 75.0
+0.3 86.0
+0.4 90.0
+0.5	92.0
+0.6	91.5
+0.7	90.0
+0.8 88.0
+0.9 85.0
+1.0	82.0
+GENERATOR_MAX_DISCHARGE 4.0
+STATIC_GENERATOR_EFFICIENCY	0.96
+HEADLOSSCOEF	0.3
+SHARED_PENSTOCK	TRUE
+POWSTAT_MASL 690.0
+POWSTAT_MIN_DISCHARGE	1.0
+POWSTAT_STARTSTOP	2.0
+LOCAL_ENERGY_EQUIVALENT	0.11
+AUTO_QMIN -9999
+MAX_ADJUST -9999
+ENDNODE
+#######################################################################################
+
+########################################################################################
+# NODE NODETYPE IDNR NAME DOWNSTREAM_NODE_IDNR
+NODE CHANNEL 2 VANAROSEN -9
+N_CASCADE_LINRES 3
+K_TRAVELTIME_HOURS 4
+QMIN -9999
+ENDNODE
+########################################################################################

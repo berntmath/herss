@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "herss-topology-editor"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = ["PySide6", "numpy", "pyqtgraph"]
+
+[project.optional-dependencies]
+dev = ["pytest"]
+
+[project.scripts]
+topoed = "topoed.app:main"
+
+[tool.setuptools.packages.find]
+include = ["topoed*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

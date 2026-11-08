@@ -39,15 +39,20 @@ SOFTWARE.
 #include <sstream>
 #include <map>
 #include <cmath>
+#include <deque>
 #include "arraycurve.h"
 #include "logger.h"
+#include "smoothing.h"
+#include "naturalchannel.h"
+#include "manningchannel.h"
+
 #include <time.h>
 #include <vector> 
 using namespace std;
 
 // BVM May 2026, we start using the version convention MAJOR.MINOR.PATCH
-const string VERSION = "4.0.00"; //Since we now have four node types;)
-const string VERSION_DATE = "20260814";
+const string VERSION = "4.1.0"; //Since we now have four node types;)
+const string VERSION_DATE = "20261108";
 
 // Maximum number of nodes allowed. // to save coding
 #define MAX_NR_NODES 250
@@ -92,11 +97,11 @@ const std::string DEFAULT_STRING_INIT = "ERROR_STR_NOT_INIT";
 
 // Maximum nr of generators in a powerstation
 #define MAX_NR_GENERATORS 6
-#define MAX_NR_CASCADED_RESERVOIRS 10
+#define MAX_NR_CASCADED_RESERVOIRS 50
 
 #define N_UNIFORM_EFF_CURVE_POINTS 11
 
-#define HERSS_AGGRESSIVE_ACTIONS_COST 1000
+#define HERSS_AGGRESSIVE_ACTIONS_COST 10000
 
 
 /////////////////////////////////////////////////////////////////
@@ -113,6 +118,51 @@ const std::string DEFAULT_STRING_INIT = "ERROR_STR_NOT_INIT";
    #define timegm(X) _mktime64(X) - timezone
    #define gmtime_r(X,Y) gmtime_s(Y,X)
 #endif
+
+
+
+// I like to have a generic way to get the function signature for debugging purposes.
+// printf("file: %s  line: %d  function: %s\n", __FILE__, __LINE__, HERSS_FUNCTION_SIGNATURE);
+// Will work on different compilers to provide a consistent way to get the function signature.
+
+#if defined(_MSC_VER)
+    #define HERSS_FUNCTION_SIGNATURE __FUNCSIG__
+#elif defined(__GNUC__) || defined(__clang__)
+    #define HERSS_FUNCTION_SIGNATURE __PRETTY_FUNCTION__
+#else
+    #define HERSS_FUNCTION_SIGNATURE __func__
+#endif
+
+
+// Smoothing widths for differentiable max/min/clamp. Set to 0.0 to recover the original hard behaviour.
+constexpr double EPS_MM3 = 1.0e-4;   // [Mm3]  = 100 m3
+constexpr double EPS_M3S = 1.0e-2;   // [m3/s]
+constexpr double EPS_M   = 1.0e-2;   // [m] for water levels (masl)
+constexpr double EPS_FR  = 1.0e-2;   // [-] for the fractional filling of a reservoir
+constexpr double EPS_HATCH_ACTION = 5.0e-3;   // [-] smoothing width of |change in hatch action|, large values approach a quadratic
+
+// EPS_REL_FLOW, the relative blend width for capped flows, is defined in smoothing.h
+
+// Start/stop cost. A generator counts as running above START_STOP_THRESHOLD. The indicator rises smoothly from 0 to 1 over
+// START_STOP_WIDTH above the threshold, so the start/stop cost has a gradient. Outside the zone it is exactly 0 or 1.
+constexpr double START_STOP_THRESHOLD = 0.01;   // [-] action
+constexpr double START_STOP_WIDTH     = 0.02;   // [-] action
+
+// Smoothstep of the action: 0 for a <= threshold, 1 for a >= threshold + width, u^2 (3 - 2u) in between, u = (a - threshold) / width
+inline double smooth_on(double a) {
+    const double u = (a - START_STOP_THRESHOLD) / START_STOP_WIDTH;
+    if (u <= 0.0) return 0.0;
+    if (u >= 1.0) return 1.0;
+    return u * u * (3.0 - 2.0 * u);
+}
+inline double smooth_on_d(double a) {
+    const double u = (a - START_STOP_THRESHOLD) / START_STOP_WIDTH;
+    if (u <= 0.0 || u >= 1.0) return 0.0;
+    return 6.0 * u * (1.0 - u) / START_STOP_WIDTH;
+}
+
+
+
 
 //-----------------------------------------------------------------------------
 // Smoothly maps ℝ → [0,1] (differentiable alternative to clamp)
@@ -136,6 +186,15 @@ inline double smooth_min(double a, double b) {
 //-----------------------------------------------------------------------------
 
 
+// relu_hi, relu_lo, smin, smax, smin_nn and smin_nn_grad are defined in smoothing.h
+
+
+
+
+
+
+
+
 // This is the naming convention that needs to be used inside the topolgy file 
 // In earlyer version we used POWERSTATION, this has now changed to PSTATION 
 // We make it more consistent with class names. 
@@ -144,10 +203,11 @@ enum NodeType
    RESERVOIR,
    PSTATION,
    CHANNEL,
-   PUMP
+   PUMP,
+   INTAKE
 };
 
-const size_t NODE_TYPE_COUNT = 4;
+const size_t NODE_TYPE_COUNT = 5;
 
 inline const char* EnumToString(NodeType v)
 {
@@ -156,11 +216,35 @@ inline const char* EnumToString(NodeType v)
         case RESERVOIR:   return "RESERVOIR";
         case PSTATION:   return "PSTATION";
         case CHANNEL: return "CHANNEL";
-        case PUMP: return "PUMP";
+        case PUMP: return "PUMP";   
+        case INTAKE: return "INTAKE";
     }
     return "VOID";
 }
 //---------------------------------------------------------------------------
+
+enum RoutingMethod
+{
+    A_CASCADEDLINRES,
+    B_LAGGED_CASCADEDLINRES,
+    C_NONLINEARRESCASCADE,
+    D_MANNING
+};
+
+inline const char* RoutingEnumToString(RoutingMethod rm)
+
+{
+    switch (rm)
+    {
+        case A_CASCADEDLINRES:   return "A_CASCADEDLINRES";
+        case B_LAGGED_CASCADEDLINRES:   return "B_LAGGED_CASCADEDLINRES";
+        case C_NONLINEARRESCASCADE: return "C_NONLINEARRESCASCADE";
+        case D_MANNING: return "D_MANNING";
+    }
+    return "VOID";
+}
+//---------------------------------------------------------------------------
+
 
 //---------------------------------------------------------------------------
 // Forward declarations to make all classes visible before they are defined
@@ -308,6 +392,9 @@ public:
     string outputdir;
     string inputdir;
 
+    string manifest_file;    // MANIFEST_FILE, empty when no manifest is wanted.
+    string nodefile_format;  // NODEFILE_FORMAT: TXT, CSV or BOTH.
+
     TopologyParser topoparser;
 
     bool found_topologyfilename;
@@ -322,6 +409,19 @@ public:
     bool printglobalinfo; 
     bool printeconomicinfo;
 
+    bool use_autodiff;
+
+    // HERSS-AD, Adam optimization of the generator actions (global file keywords, see optimizer.h)
+    bool   adam_optimizer;          // ADAM_OPTIMIZER TRUE/FALSE
+    double adam_learning_rate;      // LEARNING_RATE
+    size_t adam_max_iterations;     // MAX_ITERATIONS
+    size_t adam_patience;           // PATIENCE
+    double adam_grad_tolerance;     // GRAD_TOLERANCE
+    bool   adam_start_from_file;    // START_ACTIONS FILE, or a constant in [0,1]
+    double adam_start_constant;
+    bool   adam_verbose;            // ADAM_VERBOSE
+    string adam_actions_out;        // OPTIMIZED_ACTIONFILE, in OUTPUTDIR
+    string adam_controls;           // OPTIMIZE_CONTROLS: GENERATORS, HATCH or ALL
 
     string logfilename;
     size_t nr_nodes;
@@ -329,6 +429,8 @@ public:
     size_t nr_reservoirs;
     size_t nr_channels;
     size_t nr_pumps;
+    size_t nr_intakes;
+
     size_t dt;     // Delta time step in seconds
     size_t stps;   // Nr of time steps in the simulation
     size_t dt_last; 
@@ -433,6 +535,14 @@ public:
     double *pump_out_m3s;  // Water pumped out of this reservoir [m3/s]
     double *channel_storage_Mm3;
 
+
+    double *intake_storage_Mm3;       // Intake storage in Mm3
+    double *intake_hatchflow_m3s;     // Intake hatch flow in m3/s
+    double *intake_captured_flow_m3s; // Intake captured flow in m3/s
+    double *intake_flooding_m3s;      // Intake flooding in m3/s
+
+
+
     double *res_Mm3;          // Reservoir filling in Mm3
     double *res_active_Mm3;   //  Reservoir filling [Mm3] minus filling at LRW 
     double *res_masl;         // Reservoir filling in meters above sea level (masl)
@@ -458,11 +568,25 @@ public:
     double *Power;
     double *EstimatedEEKV;  // Estimated energy equivalent
 
+    double *profit_grad;
+    double *Power_grad;
+    double *res_Mm3_grad;
+    double *action_grad;
+    double *res_masl_grad;      // d(ValueFunction)/d(res_masl[t]) for reservoirs
+    double *Hbrutto_grad;       // d(ValueFunction)/d(Hbrutto[t]) for powerstations
+    double *up_inflow_grad;     // d(ValueFunction)/d(up_inflow[t]), the water arriving at the node
+
+
     int *year;
     int *month;
     int *day;
     int *hour;
     int *qmin_flag;
+
+
+    
+    void ClearGradients();
+
 
 };
 //////////////////////////////////////////////////////////////////////////////////////////
@@ -517,6 +641,10 @@ class CascadedReservoirs {
     ~CascadedReservoirs();
     void setInitialStorage(std::vector<double> initial_storage_Mm3);
     double route(double q_in_m3s, double dt_seconds);
+    // Adjoint of route() for one time step. The step is linear in storages and inflow, so no forward values are needed.
+    // On entry storage_grad[i] = d(VF)/d(storage of linear reservoir i at the end of the step), on exit the same
+    // for the start of the step. q_in_grad = d(VF)/d(inflow of the first linear reservoir).
+    void routeBackward(double q_out_grad, double dt_seconds, std::vector<double> &storage_grad, double &q_in_grad);
     double totalStorageM3();
     double getStorageMm3(size_t idx_linres);
 
@@ -589,17 +717,27 @@ class Node {
     Node *ptr_downstream_node_overflow;  // Same pointer for spillway and overflow curve, since we can only use one of them in each reservoir.
     Node *ptr_downstream_node_auto_qmin;
 
+    // Pointers used by the Intake class 
+    Node *ptr_downstream_floodwater_node;
+    Node *ptr_downstream_capcap_node;
+    Node *ptr_downstream_hatch_release_node;
+
     virtual int ReadNodeData(string filename);
     virtual int ReadStateFile(string filename);
     virtual int WriteStateFile(FILE *fp);
 
     virtual int Simulate(size_t t);
+    virtual int Backward(size_t t);
+
+
     virtual int initArrayCurves(void);
     virtual int CheckWaterBalance(class Herss *herss_obj); 
     virtual double GetStartWater_Mm3(void);
     virtual double GetEndWater_Mm3(void);
     virtual int WriteNodeOutput(GlobalConfig *gc);  // Write output for each node 
     virtual double GetTunnelFLow(size_t t); // Used for reservoirs connected to a powerstation. 
+    // Adjoint of GetTunnelFLow: given d(VF)/d(tunnel flow [m3/s]) returns d(VF)/d(up_res_Mm3). Also adds the action gradients.
+    virtual double BackwardTunnelFlow(size_t t, double up_res_Mm3, double flow_grad);
 
     // Defining a function as virtual, means that it can be redefined in the child classes
     // This is an important feature since we can use the same function name, but execute different
@@ -626,8 +764,17 @@ class Reservoir: public Node {
     double filling_at_hrw_Mm3;  // Mm3
     double filling_at_lrw_Mm3;  // Mm3
     double filling_at_hatchlevel;
+    double filling_at_spillway_Mm3;   // Volume at the spillway crest, set in InitReservoir
     double cost_lrw;
     double res_penalty;
+    // FILLING_PENALTY f0 P: every time step the cost is P * dt/3600 * relu_hi(f0 - fractional filling)^2 [Euro]. P = 0 is off.
+    double filling_f0;
+    double filling_penalty;
+    double cost_filling;
+    // HATCH_ADJUSTMENT_COST fee: every step t >= 1 the cost is fee * (sqrt(d^2 + EPS_HATCH_ACTION^2) - EPS_HATCH_ACTION) [Euro],
+    // d = action[t] - action[t-1]. The fee is Euro per full hatch range of travel. 0 is off.
+    double hatch_adjustment_cost;
+    double cost_hatch_adjust;
     bool fast_overflow;         // If true, we use the fast overflow calculation.
     
     // Dynamic variables that change during the simulation
@@ -656,13 +803,10 @@ class Reservoir: public Node {
     double geo_denom; 
     // geo_denom = length_m * (slope_term + width_m); 
 
-
     bool use_reservoir_curve; // If true, we use the reservoir curves for calculating the filling and the masl.
     double res_curve_masl[MAX_NR_POINTS_CURVE];
     double res_curve_Mm3[MAX_NR_POINTS_CURVE];
     size_t nr_points_res_curve;
-
-
 
     bool use_overflow_curve; // If true, we use the overflow curve for calculating the overflow.
     double ovefl_curve_masl[MAX_NR_POINTS_CURVE];
@@ -703,7 +847,13 @@ class Reservoir: public Node {
     // VIRTUAL FUNCTIONS USED IN RESERVOIR/CHANNEL/PSTATION
     int ReadNodeData(string filename);
     int ReadStateFile(string filename);
-    int Simulate(size_t t);
+
+
+    int Simulate(size_t t) override;
+    int Backward(size_t t) override;
+
+
+
     int initArrayCurves(void);
     //int CheckWaterBalance(void);
     int CheckWaterBalance(class Herss *herss_obj);  
@@ -727,8 +877,10 @@ class Reservoir: public Node {
 
     double calcResVolume(double masl);  // Returns Mm3 
     double calcResMasl(double Mm3);     // Returns masl
+    double dResMasl_dMm3(double Mm3);   // d(masl)/d(Mm3) of calcResMasl, used by Backward
 
-
+    // d(ValueFunction)/d(initial reservoir volume), the marginal value of water at the start. Set by Backward at t = 0.
+    double res_Mm3_init_grad;
 
 };
 /////////////////////////////////////////////////////////////////////////////////////////
@@ -738,11 +890,20 @@ struct Generator {
         std::vector<double> turb_virkn_psnt;    // Turbine efficiency curve psnt values
         ArrayCurve eff_curve; 
         std::vector<double> action;             // Actions for this generator
+        std::vector<double> action_grad;        // d(ValueFunction)/d(action[t]) for this generator, filled by Backward
         double headlosscoef;                    // Head loss coefficient for this generator/penstock
         double max_discharge;                   // Maximum discharge for this generator
 
         double uniform_normalized_curve[N_UNIFORM_EFF_CURVE_POINTS];
         bool use_uniform_normalized_curve;
+
+        // We use this one for Automatic Differentiation, BVM 20261019 
+        /// Quadratic: a=-1.610031, b=2.478652, c=-0.000273
+        // We implement the option to use quadratic equations fitted to the efficiency curves, as an alternative to using the data points and interpolating on them.
+        bool use_quadratic_eff_curve = false;  // If true, we use a quadratic equation for the efficiency curve. 
+        double a_quad = -1.0*NOT_INIT;  // Coefficient a in the quadratic equation for the efficiency curve.
+        double b_quad = -1.0*NOT_INIT;  // Coefficient b in the quadratic equation for the efficiency curve.
+        double c_quad = -1.0*NOT_INIT;  // Coefficient c in the quadratic equation for the efficiency curve.
 
     };
 
@@ -815,7 +976,10 @@ class Powerstation: public Node {
 
     int ReadNodeData(string filename);
     int ReadStateFile(string filename);
-    int Simulate(size_t t);
+
+    int Simulate(size_t t) override;
+    int Backward(size_t t) override;
+
     // int initArrayCurves(void);
     //int CheckWaterBalance(void);
     int CheckWaterBalance(class Herss *herss_obj);
@@ -823,13 +987,13 @@ class Powerstation: public Node {
     double GetEndWater_Mm3(void);
     int WriteNodeOutput(GlobalConfig *gc);  // Write output for each node 
     double GetTunnelFLow(size_t t); 
+    double BackwardTunnelFlow(size_t t, double up_res_Mm3, double flow_grad) override;
     int WriteStateFile(FILE *fp);
     double CalcAdjustmenCosts(void); // Only for Powerstation 
     void ValidatePowerstationSettings();  // We check if the settings for the powerstation are valid. For example, that the number of generators is not higher than the maximum allowed, and that the headloss coefficient is not negative.
 
     double calcEfficiency(size_t gen_idx, double q_m3s);  // Calculate the efficiency for a specific generator and discharge.
-
-
+    double calcEfficiencyGrad(size_t gen_idx, double q_m3s);  // d(efficiency)/d(q_m3s), used by Backward
 
 };
 /////////////////////////////////////////////////////////////////////////////////////////
@@ -840,22 +1004,75 @@ class Channel: public Node {
     size_t stps;
     size_t dt;
     GlobalConfig *gc;
+    RoutingMethod routing_method;
 
     CascadedReservoirs *casc_reservoirs;
     // We use a series of cascaded reservoirs to model the routing in the channel.
 
+    double start_storage_m3;
+
     std::vector<double> initial_storage_linres_Mm3; 
+
+    // d(ValueFunction)/d(storage of each cascaded linear reservoir at the end of the step), carried backwards in time by Backward.
+    std::vector<double> casc_storage_grad;
+
+    // Routing method B: d(ValueFunction)/d(channel outflow) of every step. The outflow of step t is the cascade outflow of
+    // step t - routing_delay_hours, so the cascade at step s receives the entry of step s + routing_delay_hours.
+    std::vector<double> lag_q_out_grad;
+
+    // Loaded from statefile, applied in SetStartState() only when routing method matches. [Mm3]
+    std::vector<double> initial_lag_queue_Mm3;
+    std::vector<double> initial_reach_storage_Mm3;
 
     double K_traveltime_hours;  // Travel time in hours, used in the cascaded reservoir routing model.
     size_t num_cascaded_reservoirs;  // Number of cascaded reservoirs used in the routing model.
 
-    double decay;
+    size_t routing_delay_hours; // Must be 0 or positive integer 
+
+    // std::deque<double> is a C++ container that stores a sequence of double values.
+    // “Deque” is short for double-ended queue: it supports efficient insertion 
+    // and removal at both the front and back.
+    std::deque<double> lagged_outflow_volume_m3;
+
     double waterflow_m3[MAX_TRAVELTIME_HOURS];  // Keeps track of how much water that is stored in the channel. [m3]
     double init_waterflow_m3[MAX_TRAVELTIME_HOURS];  // Keeps track of how much water that is stored in the channel. [m3]
 
+    NaturalChannel nonlinear_naturalChannel{10, 3.0, 18.0, 1.20};
+    // NaturalChannel channel(
+    // 10, // numReaches
+    // 3.0, // referenceFlow [m3/s]
+    // 18.0, // referenceTravelTime [h]
+    // 1.20); // nonlinearity
+
+
+    
+    std::vector<double> reach_storage_m3;
+    // Routing method C: storage of each reach at the start of every step (stps * n_reaches), recorded by Simulate for Backward.
+    std::vector<double> reach_storage_tape_m3;
+    // Routing method C: d(ValueFunction)/d(storage of each reach at the end of the step), carried backwards in time by Backward.
+    std::vector<double> reach_storage_grad;
+    int n_reaches;
+    double referenceFlow;
+    double referenceTravelTime;
+    double nonlinearity;
+
+
+    // Manning routing method 
+    ManningChannel manningChannel;
+    double manning_length_m;       // MANNING_LENGTH_M [m]
+    double manning_bottom_width_m; // MANNING_BOTTOM_WIDTH_M [m]
+    double manning_side_slope;     // MANNING_SIDE_SLOPE [-], horizontal run per unit vertical rise (0 = rectangular)
+    double manning_slope;          // MANNING_SLOPE [-]
+    double manning_roughness_n;    // MANNING_ROUGHNESS_N [s/m^(1/3)]
+    double manning_initial_flow;   // MANNING_INITIAL_FLOW [m3/s], used to warm-start storage when no statefile value is available.
+
     int ReadNodeData(string filename);
     int ReadStateFile(string filename);
-    int Simulate(size_t t);
+
+    int Simulate(size_t t) override;
+    int Backward(size_t t) override;
+
+
     int initArrayCurves(void);
     int CheckWaterBalance(class Herss *herss_obj);  
     double GetStartWater_Mm3(void);
@@ -866,6 +1083,52 @@ class Channel: public Node {
     int SetStartState(void);
     void PrintChannelWater(void);
     void ValidateChannelSettings();  // We check if the settings for the channel are valid. For example, that the travel time is not longer than the maximum allowed.
+ 
+    double GetRoutingStorageM3();
+
+
+};
+/////////////////////////////////////////////////////////////////////////////////////////
+class Intake : public Node {
+
+    public:
+    Intake();
+    ~Intake();
+
+    double intake_volume_init_Mm3;
+    double intake_volume_init_fr;
+    
+    // Dynamic variables that change during the simulation
+    double intake_Mm3;      //  Intake filling [Mm3]
+    double intake_fr;      //  Intake filling as a fraction of full.
+
+    size_t floodwater_down_idnr;
+    double capture_capacity_m3s; // Vannmengde som videreføres fra inntaket [m3/s]
+    size_t capcap_down_idnr;
+    size_t hatch_release_down_idnr;
+    double const_hatch_release_m3s;
+
+    double max_volume_Mm3;
+
+    size_t stps;
+    size_t dt;
+    GlobalConfig *gc;
+    void ValidateIntakeSettings();
+    int ReadNodeData(string filename);
+    int ReadStateFile(string filename);
+
+
+    int Simulate(size_t t) override;
+    int Backward(size_t t) override;
+
+
+    void InitIntake();
+    int CheckWaterBalance(class Herss *herss_obj);  
+
+    double GetStartWater_Mm3();
+    double GetEndWater_Mm3();
+    int WriteNodeOutput(GlobalConfig *gc);  // Write output for each node 
+    int WriteStateFile(FILE *fp);
 
 };
 /////////////////////////////////////////////////////////////////////////////////////////
@@ -914,7 +1177,10 @@ class Pump: public Node {
 
     int ReadNodeData(string filename);
     int ReadStateFile(string filename);
-    int Simulate(size_t t);
+    int Simulate(size_t t) override;
+    int Backward(size_t t) override;
+
+
     int CalcPowerAndCost(size_t t);  // Head, power and cost for timestep t. Run after the reservoirs have updated their levels.
     int initArrayCurves(void);
     int CheckWaterBalance(class Herss *herss_obj);
@@ -941,6 +1207,8 @@ public:
     size_t nr_pstations;
     size_t nr_channels;
     size_t nr_pumps;
+    size_t nr_intakes;
+    
 
     double start_water_Mm3;
     double end_water_Mm3;
@@ -969,8 +1237,12 @@ public:
     double avg_price;
     double sum_startstopcost;
     double sum_max_adjustment_cost;
+    double sum_hatch_adjustment_cost;
     double sum_lrw_cost;
     double sum_qmin_cost;
+    double sum_aggressive_actions_cost;
+    double sum_pump_consumption;  // MWh, positive number
+    double restprice;             // Restprice used in the last CalcVF call
     double ValueFunction[500];  // We store the value function for each timestep.
     double WaterValue[500];  // We store the water value for each timestep.
 
@@ -980,17 +1252,29 @@ public:
     Powerstation *pstations;
     Channel *channels;
     Pump *pumps;
+    Intake *intakes;
+
     double Simulate(int id);
+    int Backward(class Herss *herss_obj);   // Backward pass: needs herss_obj for the variable time steps
+    
+
+
     double CalcVF(double restprice);
     double CalcVF_atEndOfStp(double restprice, size_t stp);  // Calculate the value function at a specific timestep
     double CalcSimulationProfit();
-    int WriteRiverSystemData(double restprice);
+    int WriteRiverSystemData();  // Only writes. Run CalcVF first.
     void WriteReservoirData();
     void PrintReservoirData2Screen();
     int WriteSelectedOutputMatrix();
     double GetEndingReservoirLevel(size_t r_idnr);
     void PrintEconomicInfo(class Herss *herss_obj);
     void DiagnoseRiversystemConfiguration();   // RUn some checks to see if the configuration of the riversystem is correct.
+
+    void SeedGradients();
+    void ClearGradients();
+    int WriteGradients();   // Writes <outputdir>/gradients_<systemname>.txt, run Backward first.
+    
+
 
     
 };
@@ -1022,6 +1306,14 @@ public:
     void SetAction(size_t node_idnr, size_t gen_idnr, size_t t, double value);
 
     double GetAction(size_t node_idnr, size_t gen_idnr, size_t t);
+
+    // HERSS-AD. Run Simulate() and rs->CalcVF(restprice) first. All gradients are d(ValueFunction)/d(x).
+    int Backward();                                                          // Backward pass through the whole river system.
+    double GetActionGrad(size_t node_idnr, size_t gen_idnr, size_t t);       // d(VF)/d(action), same indexing as GetAction.
+    std::vector<double> GetActionGradSeries(size_t node_idnr, size_t gen_idnr); // d(VF)/d(action[t]) for t = 0..stps-1.
+    double GetInflowGrad(size_t t, size_t node_idnr);                        // d(VF)/d(local inflow[t] in m3/s) of a RESERVOIR node.
+    double GetReservoir_Init_Mm3_grad(size_t node_idnr);                     // d(VF)/d(initial volume in Mm3) of a RESERVOIR node.
+    double GetReservoir_Init_fr_grad(size_t node_idnr);                      // d(VF)/d(initial fraction) of a RESERVOIR node.
     void PrintActions();
     void PrintReservoirLevels_fr();
     void PrintRemainingChannelWater_Mm3();

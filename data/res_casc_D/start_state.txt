@@ -17,6 +17,6 @@ NODE RESERVOIR 2 HJELLE 0.8
 # After th enode information we need to provide the starting water storage in each linear reservoir.
 # Number of values must be the same as specified in the topology file (N_CASCADE_LINRES 3)
 # NODE CHANNEL IDNR NAME LINRES1_Mm3 LINRES2_Mm3 LINRES3_Mm3
-NODE CHANNEL 1 SKJE 0.001 0.002 0.003
-NODE CHANNEL 3 ELV 0.001 0.002 0.003
+NODE CHANNEL 1 SKJE A_CASCADEDLINRES N 3 0.001 0.002 0.003
+NODE CHANNEL 3 ELV A_CASCADEDLINRES N 3 0.001 0.002 0.003
 ## END 

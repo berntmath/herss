@@ -1,0 +1,26 @@
+# Project: 		Hydraulic Economic River System Simulator (HERSS)
+# Programmer: 	Bernt Viggo Matheussen, Sep 2026
+#               Global configuration file for channel_tests 
+
+SYSTEMNAME CHannelTest
+
+# Input
+INPUTDIR ./
+ACTIONFILE actions.txt
+INFLOWFILE inflowseries.txt
+PRICEFILE pricefile.txt
+TOPOLOGYFILE topology.txt
+STARTSTATEFILE start_state.txt
+
+# Output information 
+OUTSTATEFILE outstate.txt
+WRITE_NODEFILES 1
+OUTPUTDIR ./
+
+# Print global system information to screen or not.
+# Default is not to print
+PRINT_GLOBAL_INFO FALSE
+
+# Print economic info to screen or not. 
+# Default is not to print. 
+PRINT_ECONOMIC_INFO FALSE

@@ -1,0 +1,89 @@
+##########################################################################
+# TOPOLOGY FILE Upper Tovdalen Hydro Power System (uTAHPS)
+# BVM 1 Mar, 2024
+# 
+# qmin[m3/s]  start_data[dd.mm] end_data[dd.mm] QMIN_COST[Euro]
+# QMIN 0.1 01.10 15.06 4.0
+##########################################################################
+
+#######################################################################################
+# HJELLEVATN RESERVOIR
+# NODE NODETYPE(RESERVOIR/PSTATION/CHANNEL) IDNR NAME
+NODE RESERVOIR 0 HJELLE
+HRW 757.0
+LRW 748.0
+RES_PENALTY 300
+FLOODLEVEL_PENALTY 300
+
+# Reservoir Geometry, scipping the reservoir curve. specifying the geometry of a trapezoide
+RESERVOIR_GEOMETRY
+WIDTH_M 1000
+LENGTH_M 1000
+# Angle of the sides of the reservoir, in degrees. 
+# 0 < THETA < 90, close to zero is very flat valley, 
+# close to 90 is almost rectangular cross-section
+THETA 20
+BOTTOM_MASL 745.0
+
+# Reservoir curve points, [masl, Mm3] Curve must go below hatch_masl.
+#RESERVOIR_CURVE 7
+#747	0.0
+#748	1.0
+#749	2.37
+#750	3.24
+#757	10.0
+#758	15.0
+#760	500
+
+# Overflow curve, points, downstream idnr   [masl, m3s]
+OVERFLOW_CURVE 3 2
+757	0.0
+758	10.0
+760	200.0
+FAST_OVERFLOW FALSE
+# Outlet hatch downstream_nodeid, qmin_hatch, qmax_hatch, hatch_masl
+OUTLET_HATCH -9999
+OUTLET_TUNNEL 1
+OUTLET_AUTO_QMIN -9999
+ENDNODE
+#######################################################################################
+
+#######################################################################################
+# SVOLETJONN POWERSTATION HJELLEVATN IS INTAKE 
+NODE PSTATION 1 SVOLETJONN
+DOWNLINK_IDNR 2
+# Turbine efficiency curve [M3s, %]
+NR_GENERATORS 1
+GENERATOR 0
+TURBINE_CURVE 10
+0.00	0
+1.00	50
+1.72	80
+2.27	90
+2.79	93
+3.19	93
+3.47	93
+3.67	92
+3.79	91
+4.00	88  
+GENERATOR_MAX_DISCHARGE 4.0
+STATIC_GENERATOR_EFFICIENCY	0.96
+HEADLOSSCOEF	0.3
+SHARED_PENSTOCK	TRUE
+POWSTAT_MASL 690.0
+POWSTAT_MIN_DISCHARGE	1.0
+POWSTAT_STARTSTOP	2.0
+LOCAL_ENERGY_EQUIVALENT	0.11
+AUTO_QMIN -9999
+MAX_ADJUST -9999
+ENDNODE
+#######################################################################################
+
+########################################################################################
+# NODE NODETYPE IDNR NAME DOWNSTREAM_NODE_IDNR
+NODE CHANNEL 2 VANAROSEN -9
+N_CASCADE_LINRES 3
+K_TRAVELTIME_HOURS 4
+QMIN -9999
+ENDNODE
+########################################################################################

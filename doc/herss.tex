@@ -12,8 +12,21 @@
 \usepackage{booktabs}
 \usepackage{amsmath}
 \usepackage{wasysym}
-\usepackage{url}
 
+\usepackage[absolute,overlay]{textpos}
+
+\usepackage{url}
+\usepackage{enumitem}
+
+\usepackage{listings}
+
+\lstset{
+	basicstyle=\ttfamily\small,
+	breaklines=true,
+	breakatwhitespace=false,
+	columns=fullflexible,
+	postbreak=\mbox{\textcolor{gray}{$\hookrightarrow$}\space}
+}
 
 
 \usepackage[ 
@@ -39,18 +52,44 @@
 
 \renewcommand{\bibname}{References}
 
+\definecolor{coverblue}{RGB}{33,95,154}
+
+
 
 \begin{document}
 	% --- Cover page ---
 	\newgeometry{margin=0pt}
+	
 	\begin{titlepage}
-			\newgeometry{margin=0pt}
-			\setlength{\hoffset}{0in}
-			\setlength{\voffset}{0in}
-			\thispagestyle{empty}
-			\noindent\includegraphics[width=\paperwidth, height=\paperheight, keepaspectratio=false]{./figures/frontpage}
-			\clearpage
-			\restoregeometry		
+	\newgeometry{margin=0pt} 
+	\thispagestyle{empty} 
+	% Background image 
+	\noindent 
+	\includegraphics[ width=\paperwidth, height=\paperheight ]{./figures/frontpage} 
+	
+	% Overlay text 
+	\begin{textblock*}{8cm}(12cm,26cm)
+		{\sffamily\bfseries
+			\color{coverblue}%
+			\fontsize{16}{26}\selectfont
+			Bernt Viggo Matheussen\par\vspace{0.0cm}
+			\fontsize{14}{22}\selectfont
+			Nov 8, 2026\par}
+	\end{textblock*} 
+	
+	% Overlay text 
+	\begin{textblock*}{12.0cm}(2cm,26cm)
+		
+		{\sffamily\bfseries
+			\color[RGB]{33,95,154}%
+			\fontsize{16}{18}\selectfont
+			\noindent User manual and \par
+			\noindent technical documentation \par
+			\noindent Version 4.1.0\par
+		}
+		
+	\end{textblock*} 
+	\clearpage 
 	\end{titlepage}
 	\restoregeometry
 
@@ -406,19 +445,46 @@
 	\label{chap:structure}
 
 	HERSS represents a regulated river system as a network of nodes, where each node corresponds to a physical component such as a reservoir, a power station, or a river channel. Every node has a unique identifier and belongs to one of the supported node types. Water enters a node from upstream, is processed according to the physical behavior of that node type, and is then routed to one or more downstream nodes, stepping forward in time until the end of the simulation period.
-
-	This node-based approach makes it straightforward to represent river systems of varying complexity, from a simple single-reservoir system to large networks with many reservoirs, power stations, and channels arranged in branched or cascaded configurations. This chapter describes the supported node types, how they are connected, and what physical processes each one represents.
-		
-	Figure~\ref{fig:model_structure} shows a schematic of a more complex river network, illustrating how different node types can be combined to represented a realistic hydropower system.
+	
+	
 	
 	\begin{figure}[h]
-		\centering
-		\includegraphics[width=0.75\textwidth]{./figures/utahps.pdf}
-		\caption{Schematic of a hydropower river system represented as a network of nodes in HERSS.}
-		\label{fig:model_structure}
+	\centering
+	\includegraphics[width=0.65\textwidth]{./figures/utahps.pdf}
+	\caption{Schematic of a hydropower river system represented as a network of nodes in HERSS.}
+	\label{fig:model_structure}
 	\end{figure}
+		
+		
+	Figure~\ref{fig:model_structure} shows a schematic of a more complex river network, illustrating how different node types can be combined to represented a realistic hydropower system. This node-based approach makes it straightforward to represent river systems of varying complexity, from a simple single-reservoir system to large networks with many reservoirs, power stations, and channels arranged in branched or cascaded configurations. This chapter describes the supported node types, how they are connected, and what physical processes each one represents.
+
 	
-	\section{Node Topology and ordering}
+	\section{Nodetypes, Topology and ordering}
+		
+	\subsection{Nodetypes}
+
+	HERSS currently supports four node types:
+
+	\begin{itemize}
+		\item \textbf{Reservoir}: a storage node representing a regulated lake or impoundment. The reservoir receives inflow, stores water, and releases it through one or more outlets to downstream nodes.
+		
+		\item \textbf{Power station}: a node representing a hydropower plant. The power station receives water from an upstream reservoir, generates electricity from the turbine discharge, and passes the discharged water downstream.
+		
+		\item \textbf{Channel}: a routing node representing a river reach or transport element. The channel receives water from upstream and routes it downstream with delay and attenuation.
+		
+		\item \textbf{Pump}: a node representing a pumped-storage hydropower (PSH) facility, using electricity to move water from a source reservoir to a target reservoir.
+		
+
+		\item \textbf{Intake}: a node representing an intake that captures water from a natural stream. The captured water is passed into a downstream reservoir or channel.
+		
+		
+	\end{itemize}
+
+	Each node type is described in detail in later sections. 
+	
+	
+	\subsection{Topology and ordering}
+
 	The order in which nodes are defined in the topology file determines the order in which they are simulated at each time step. Water is routed from the most upstream node towards the most downstream node in sequence. It is therefore important that the topology file correctly reflects the physical layout and connectivity of the river system. 
 	
 	The topology file defines the river system as a directed acyclic graph (DAG) of nodes, where each node represents either a reservoir, a power station, a channel reach, or a pump (Section~\ref{subsec:pump}). Each node is assigned a unique integer identifier (\texttt{IDNR}), starting at zero. The calculation order in HERSS is determined entirely by the node numbering: at each time step, nodes are simulated in ascending order of their \texttt{IDNR}, from node~$0$ to node~$N-1$, where $N$ is the total number of nodes.
@@ -455,22 +521,9 @@
 	HERSS does \emph{not} automatically sort or validate the topological order of nodes at runtime. It is the responsibility of the model user to ensure that node identifiers reflect a valid upstream-to-downstream ordering. An incorrect ordering will lead to erroneous water routing, because a downstream node may be simulated before all its upstream contributions have been computed for the current time step, resulting in those contributions being applied one time step too late.
 	\newpage
 
-	\section{Node Types}
-	\label{sec:nodetypes}
 
-	HERSS currently supports four node types:
-
-	\begin{itemize}
-		\item \textbf{Reservoir}: a storage node representing a regulated lake or impoundment. The reservoir receives inflow, stores water, and releases it through one or more outlets to downstream nodes.
-		\item \textbf{Power station}: a node representing a hydropower plant. The power station receives water from an upstream reservoir, generates electricity from the turbine discharge, and passes the discharged water downstream.
-		\item \textbf{Channel}: a routing node representing a river reach or transport element. The channel receives water from upstream and routes it downstream with delay and attenuation.
-        \item \textbf{Pump}: a node representing a pumped-storage hydropower (PSH) facility, using electricity to move water from a source reservoir to a target reservoir.
-	\end{itemize}
-
-	Each node type is described in detail in the following subsections.
-
-	\subsection{Reservoir}
-	\label{subsec:reservoir}
+	\section{Reservoir}
+	\label{sec:reservoir}
 
 	The node type \texttt{RESERVOIR} models a hydro power reservoir. For each reservoir the user must supply a piecewise-linear \emph{reservoir curve} that maps water surface elevation (meters above sea level, masl) to stored volume (Mm$^3$). A minimum of two points is required, but minimum four points are recommended. The curve must span from below the Lowest Regulated Water (LRW) level to above the Highest Regulated Water (HRW) level, and ideally extend somewhat beyond both limits to avoid extrapolation errors during extreme events. \\
 
@@ -479,6 +532,9 @@
 	which is always active. Within each time step, outlets are evaluated in the following fixed
 	order: tunnel, hatch, automatic minimum-flow release, and finally overflow. A schematic of the
 	outlet types is shown in Figure \ref{fig:reservoir}.
+	
+	Make a note on modelling LAKES. We can do this by using the Nodetype Reservoir by only using the overflow curve 
+	
 	
 
 	\begin{description}
@@ -719,8 +775,8 @@
 	\newpage
 
 
-	\subsection{Powerstation}
-	\label{subsec:powerstation}
+	\section{Powerstation}
+	\label{sec:powerstation}
 
 	The \texttt{PSTATION} node models a hydropower power station. Unlike the reservoir node, the
 	power station cannot store water. All water that enters the node in a given time step must leave it
@@ -927,10 +983,20 @@
 	\subsubsection{Start and Stop Costs}
 
 	A start/stop cost (\texttt{POWSTAT\_STARTSTOP}) [EUR] is incurred each time a generator
-	transitions between the off state ($a = 0$) and the on state ($a > 0$), or vice versa. The
+	transitions between the off state and the on state, or vice versa. The
 	cost is split equally between the start event and the stop event, so each transition
 	contributes $\texttt{POWSTAT\_STARTSTOP} / 2$ to the total cost. This penalty discourages
 	frequent cycling, which is physically costly in real plant operation.
+
+	To make the cost differentiable (automatic differentiation) the state of a generator is not a hard
+	on/off switch. A smooth indicator $s(a)$ of the action $a$ is used: $s = 0$ for $a \le 0.01$, $s = 1$ for
+	$a \ge 0.03$, and a smoothstep $s = u^2 (3 - 2u)$ with $u = (a - 0.01)/0.02$ in between. The cost in time step $t$ is
+	\begin{equation}
+		\mathrm{cost}_t = \frac{\texttt{POWSTAT\_STARTSTOP}}{2} \left( s(a_{t-1}) - s(a_t) \right)^2 .
+	\end{equation}
+	For actions below 0.01 or above 0.03 this is exactly the cost of the hard on/off rule: half the fee for every start or stop,
+	and nothing in steady operation. An action between 0.01 and 0.03 counts as a partly running generator and gives a partial cost.
+	In the first time step the previous state is taken from the state file: running ($s = 1$) if the initial power is above 0.01, otherwise stopped.
 
 	\subsubsection{Aggressive Action Penalty}
 
@@ -945,30 +1011,36 @@
 
 
 
-
-
-
-
-
-
-
-
-
-	\subsection{Channel}
-	\label{subsec:channel}
+	\section{Channel}
+	\label{sec:channel}
 
 	The \texttt{CHANNEL} node models the transport of water through a river reach between two
 	nodes. It introduces a travel time delay and attenuation of the flood wave, representing the
-	physical processes of translation and dispersion in a natural watercourse. Unlike the power
-	station, the channel produces no electricity and carries no economic value on the water
-	stored within it.
+	physical processes of translation and dispersion in a natural watercourse. Like the power
+	station, the channel produces no electricity. The water volume stored in the channel is included in the remaining water in the system, and hence added as economic value.
 
 	A channel node receives water from its upstream neighbour through the standard
 	\texttt{up\_inflow} mechanism and routes it to a single downstream node specified by
 	\texttt{DOWNSTREAM\_NODE\_IDNR}. If the downstream identifier is set to \texttt{-9}, the
-	channel is the terminal node of the river system (ocean) and its outflow leaves the modeled domain.
+	channel is the terminal node of the river system (ocean) and its outflow leaves the modeled domain. \\
 
-	\subsubsection{Routing Model: Cascaded Linear Reservoirs}
+	
+	
+
+
+	Flow routing in HERSS can be done with one out of four different methods. 
+
+	\begin{enumerate}[label=\Alph*.]
+		\item Cascaded Linear Reservoirs 
+		\item Lagged Cascaded Linear Reservoirs
+		\item Nonlinear Natural Channel Routing 
+		\item Routing using Manning's approach
+	\end{enumerate}
+
+
+
+
+	\subsection{Routing Model: Cascaded Linear Reservoirs}
 	Flow routing in HERSS is based on a series of $N$ cascaded linear reservoirs
 	(\texttt{N\_CASCADE\_LINRES}). Figure \ref{fig:linres} show a graphical representation of 
 	three linear reservoirs in series. Linear and non-linear reservoirs have been used extensively
@@ -1010,7 +1082,33 @@
 
 
 
-	\subsubsection{Parameters}
+	\subsection{Routing Model: Nonlinear Reaches}
+	Routing method C (\texttt{N\_REACHES}, \texttt{REFERENCE\_FLOW}, \texttt{REFERENCE\_TRAVEL\_TIME},
+	\texttt{NONLINEAR\_COEFFICIENT}) is a series of $N$ nonlinear reservoirs (reaches). The outflow of a reach
+	with storage $S$ [m$^3$] is
+	\[
+	Q_\mathrm{pot} = a \, S^{p},
+	\]
+	where $p$ is \texttt{NONLINEAR\_COEFFICIENT} and $a$ is chosen so that the reach releases
+	\texttt{REFERENCE\_FLOW} when the whole channel holds the volume \texttt{REFERENCE\_FLOW} $\times$
+	\texttt{REFERENCE\_TRAVEL\_TIME}, shared equally between the reaches. The outflow is evaluated from the
+	storage at the start of the time step, and the storage is updated by
+	\[
+	Q_\mathrm{out} = Q_\mathrm{pot} \wedge \frac{S}{\Delta t}, \qquad
+	S_{t+\Delta t} = S_t + \left(I_t - Q_\mathrm{out}\right)\Delta t ,
+	\]
+	where $\wedge$ is a smooth minimum, so that a reach cannot release more water than it holds. The smooth minimum
+	(\texttt{smin\_nn} in \texttt{smoothing.h}) is exactly $Q_\mathrm{pot}$ unless $S/\Delta t$ is within 0.1\,\%
+	of it, so the cap only differs from a hard minimum in that narrow zone. It is differentiable, which is
+	what the backward pass (\texttt{Channel::Backward}) needs. Unlike method A, the update is explicit: the outflow
+	of a step depends on the storage at the start of the step, so an inflow reaches the outflow of a channel with $N$
+	reaches $N$ steps later at the earliest.
+
+	\texttt{NONLINEAR\_COEFFICIENT} must be at least 1. The value 1 is a linear reservoir. For $p < 1$ the travel time
+	would grow with the flow, which a river does not do, and the slope $dQ/dS = a p S^{p-1}$ of an empty reach would be
+	infinite. Such values are rejected when the topology file is read.
+
+	\subsection{Parameters}
 
 	\begin{description}
 		\item[\texttt{K\_TRAVELTIME\_HOURS}] The total travel time parameter [hours], equivalent
@@ -1026,8 +1124,14 @@
 		The maximum allowed value is \texttt{MAX\_NR\_CASCADED\_RESERVOIRS} (currently 10).
 	\end{description}
 
-	
-	\subsubsection{Estimating Travel Time for Channel Nodes}
+	\paragraph{Pure delay (routing method B).} Adding \texttt{ROUTING\_DELAY\_HOURS} $L$ to the node
+	passes the outflow of the cascade through a delay of $L$ whole hours, $Q_\mathrm{out}(t) = Q_\mathrm{cascade}(t-L)$.
+	The first $L$ hours are released from the lag queue of the state file. The delay requires a time step of one hour.
+	The model is linear and smooth, and it has an adjoint in HERSS-AD like the plain cascade: the gradient of the value
+	function with respect to the cascade outflow at step $s$ is the gradient with respect to the channel outflow at step $s+L$.
+	Water that enters in the last $L$ hours is still in the channel when the run ends, and has no value.
+	At present only routing methods A and B can be used with \texttt{AUTODIFF TRUE}.
+
 	For river reaches under gradually varying, subcritical flow conditions, the kinematic
 	wave approximation provides a practical framework for estimating travel time.
 	Under this approximation, the flood wave celerity $c$ is related to the mean flow
@@ -1070,7 +1174,7 @@
 		travel times are typically in the range of 0.1--2 hours per km of reach.
 		For flatter lowland rivers the travel time may be several times longer.
 
-        \item \textbf{Manning's roughness coefficient}: n is typically in the range of 0.025-0.1 for natural streams (\cite{JobsonFroelich88}), where the lower values represent large rivers with little restrictions and rough sections, and the larger numbers represent smaller streams with more rough patches and large boulders.  
+        \item \textbf{Manning's roughness coefficient}: n is typically in the range of 0.025-0.1 for natural streams, where the lower values represent large rivers with little restrictions and rough sections, and the larger numbers represent smaller streams with more rough patches and large boulders.  
             
 	\end{itemize}
 	
@@ -1079,13 +1183,20 @@
 	maximum spreading of the flood peak; values of $N = 3$--$5$ are typical for
 	natural river reaches.
 	
-	\subsubsection{Minimum Flow (\texttt{QMIN})}
+	\subsection{Minimum Flow (\texttt{QMIN})}
 
 	A minimum flow requirement can be defined for a channel node using \texttt{QMIN}. If the
-	routed outflow falls below the specified minimum in any time step, a penalty cost is incurred, no additional actions is executed.
+	routed outflow $Q_{out}$ falls below the required minimum $Q_{min}$ in a time step, a penalty cost is incurred, no additional actions is executed.
+	The penalty is the fee of the period, $c$ [Euro/hour], scaled by the unmet fraction of the requirement:
+	\begin{equation}
+		\mathrm{cost} = c \, \frac{\Delta t}{3600} \, \frac{\mathrm{relu}_\epsilon(Q_{min} - Q_{out})}{Q_{min}},
+	\end{equation}
+	where $\mathrm{relu}_\epsilon(x)$ is a smooth version of $\max(0,x)$ that is exactly zero for $x \le 0$, equals $x - \epsilon$ for $x \ge 2\epsilon$ and is quadratic in between. The smoothing width is $\epsilon = \min(0.01, 0.05\,Q_{min})$ [m$^3$/s].
+	A requirement that is met costs nothing. The cost grows with the unmet fraction, a half fee when half of the requirement is missing, and so on. Because of the smoothing, the full fee is not reached: when nothing is released the cost is the fraction $1 - \epsilon/Q_{min}$ of the fee, at least $95\,\%$.
+	A smooth penalty is used so that the cost has a gradient everywhere below the requirement, which is needed for gradient based optimisation (automatic differentiation).
 	Up to five seasonal periods with different minimum flow requirements can be defined.
 
-    If \texttt{QMIN} is used downstream of a reservoir enforcing the \texttt{OUTLET\_AUTO\_QMIN}, note that the number of cascaded linear reservoirs \texttt{N\_CASCADE\_LINRES}, the time resolution $\Delta t$ in the simulation, and the \texttt{K\_TRAVELTIME\_HOURS} all affect the outflow from this (\texttt{CHANNEL}) node. As the outflow exhibits asymptotic behaviour and for a finite time never approaches the inflow value, a tolerance of $1 \times 10^{-3}$ [m$^3$/s] is used to accept the \texttt{QMIN} requirement.
+    If \texttt{QMIN} is used downstream of a reservoir enforcing the \texttt{OUTLET\_AUTO\_QMIN}, note that the number of cascaded linear reservoirs \texttt{N\_CASCADE\_LINRES}, the time resolution $\Delta t$ in the simulation, and the \texttt{K\_TRAVELTIME\_HOURS} all affect the outflow from this (\texttt{CHANNEL}) node. As the outflow exhibits asymptotic behaviour and for a finite time never approaches the inflow value, the outflow can lie slightly below the requirement. With the smooth penalty this costs almost nothing: a shortfall of $10^{-3}$ [m$^3$/s] costs $2.5 \times 10^{-5}$ of the fee for a requirement of 1 [m$^3$/s].
 
     When \texttt{QMIN} is used, HERSS expect the following arguments:
     \begin{verbatim}
@@ -1095,7 +1206,7 @@
 	\end{verbatim}
     where \texttt{nr\_periods} is the integer describing the number of defined periods listed below (Maximum number of 5). The same date verification procedure is used as for \texttt{OUTLET\_AUTO\_QMIN}.
 
-	\subsubsection{State File}
+	\subsection{State File}
 
 	The channel state file entry stores the water volume currently held in each of the $N$
 	cascaded linear reservoirs at the end of the simulation:
@@ -1108,21 +1219,94 @@
 	at the start of the next simulation run as initial conditions for the routing model, enabling correct continuity across chained simulations.
 
 
+	\subsection{Channel Start and End State Files}
+
+	The channel records in the start-state and end-state files use the same
+	whitespace-delimited ASCII format. The start-state file is read during
+	initialization, while the end-state file is written with the channel state
+	at the end of the simulation. Each channel record has the form
+
+	\begin{lstlisting}	
+		NODE CHANNEL <idnr> <name> <routing-method> N <count> <state-values...>
+	\end{lstlisting}
+
+
+	The routing method is configured by the channel topology. The method name
+	in the state file identifies the format of the stored values and is checked
+	against the topology configuration. It does not select the routing method.
+	Do not include the literal word \texttt{METHOD} in the current format.
+
+	For \texttt{A\_CASCADEDLINRES}, the values are the storage volumes in the
+	individual linear reservoirs. The value count must equal
+	\texttt{N\_CASCADE\_LINRES} in the topology.
+
+	\begin{lstlisting}
+		NODE CHANNEL 2 VANAROSEN A_CASCADEDLINRES N 3 0.00100 0.00200 0.00300
+	\end{lstlisting}
+
+
+	For \texttt{B\_LAGGED\_CASCADEDLINRES}, the first values are the storage
+	volumes in the linear reservoirs. They are followed by a lag queue, whose
+	count must match \texttt{ROUTING\_DELAY\_HOURS}. The first lag value is the
+	volume released at the next time step.
+
+	\begin{lstlisting}
+		NODE CHANNEL 2 VANAROSEN B_LAGGED_CASCADEDLINRES N 3 0.00100 0.00200 0.00300 LAG 4 0.01000 0.02000 0.03000 0.04000
+	\end{lstlisting}
+
+	The arrow indicates display wrapping only. Each channel record must be
+	written as one physical line in the ASCII state file; the arrow is not
+	part of the record.
+
+
+	For \texttt{C\_NONLINEARRESCASCADE}, the values are the stored volumes in
+	the channel reaches. The count is the number of reaches configured by
+	\texttt{N\_REACHES}.
+
+
+	\begin{lstlisting}
+		NODE CHANNEL 2 VANAROSEN C_NONLINEARRESCASCADE N 3 0.01000 0.02000 0.03000
+	\end{lstlisting}
+
+
+
+	For \texttt{D\_MANNING}, the values are also the stored volumes in the
+	channel reaches, with the count set by \texttt{N\_REACHES}.
+
+	\begin{lstlisting}
+		NODE CHANNEL 2 VANAROSEN D_MANNING N 3 0.01000 0.02000 0.03000
+	\end{lstlisting}
+
+	All stored volumes are expressed in million cubic metres (\texttt{Mm3}).
+	Values appear in reach or reservoir order. The end-state writer formats
+	these values to five digits after the decimal point.
+
+	For the two cascaded-reservoir methods, the reservoir-storage count must
+	match \texttt{N\_CASCADE\_LINRES}. For the lagged method, a lag-queue count
+	that does not match \texttt{ROUTING\_DELAY\_HOURS} is initialized to zero.
+	For the nonlinear and Manning methods, a reach-storage count that does not
+	match \texttt{N\_REACHES} causes the channel to use its configured
+	initialization instead. State rows containing only untagged values, without
+	the routing method and count, are not in the current format.
+
+
 
 
     \newpage
-	\subsection{Pump}\label{subsec:pump}
+	\section{Pump}\label{subsec:pump}
 	The \texttt{PUMP} node models a PSH facility, which is mutch like a power staion node but in reverse. It lifts water from a source \texttt{RESERVOIR} to a target \texttt{RESERVOIR} while consuming electricity. Its source and target reservoirs are given via \texttt{PUMP\_SOURCE\_IDNR} and \texttt{PUMP\_TARGET\_IDNR} rather than the usual downstream connection. Only one pump unit per node is supported, unlike power stations, where multiple generators are supported. Water below \texttt{PUMP\_INLET\_MASL} in the source reservoir cannot be withdrawn.
     \begin{figure}[h!]
         \centering
-        \includegraphics[width=1\linewidth]{figures/PUMP.png}
+        %%\includegraphics[width=1\linewidth]{figures/PUMP.png}
+        \includegraphics[width=1\linewidth]{figures/pump2.png}
+        
         \caption{Node type \texttt{PUMP}. Illustration of the connection of the pump between its source and target reservoirs.}
         \label{fig:pump}
     \end{figure}
 
     In the simulation of each time step, while the movement of water flow from the most upstream node to the most downstream node (\texttt{IDNR} 0 to \texttt{IDNR} $(N-1)$), the pump moves water from its source to the target reservoir when the simulation reaches the pumps \texttt{IDNR}. When all movement of water is simulated within each time step, the power and cost of electricity are calculated based on average head between target and source reservoirs, before the next time step is simulated.
     
-	\subsubsection{Hydraulic Head and Power Calculation}
+	\subsection{Hydraulic Head and Power Calculation}
 
 	The gross hydraulic head is computed as the average value between the target and source reservoirs within a time step, here as target minus source:
 
@@ -1148,7 +1332,7 @@
 
 	where $\eta_\mathrm{pump}(Q)$ is read from a \texttt{PUMP\_CURVE}/\texttt{UNIFORM\_NORMALIZED\_CURVE} (same format as the turbine efficiency curve, Section~\ref{subsec:powerstation}) and $\eta_\mathrm{motor}$ is \texttt{STATIC\_MOTOR\_EFFICIENCY}.
 
-	\subsubsection{Topology File Syntax}
+	\subsection{Topology File Syntax}
 
 	\begin{verbatim}
     NODE PUMP <idnr> <nodename>
@@ -1166,24 +1350,211 @@
     ENDNODE
 	\end{verbatim}
 
-    \subsubsection{Start and Stop Costs}
+    \subsection{Start and Stop Costs}
     A start/stop cost (\texttt{PUMP\_STARTSTOP}) [EUR] is incurred each time the pump
     transitions between the off state ($a = 0$) and the on state ($a > 0$), or vice versa,
     exactly as for a power station (Section~\ref{subsec:powerstation}). The cost is split
     equally between the start event and the stop event, so each transition contributes
     $\texttt{PUMP\_STARTSTOP} / 2$ to the total cost.
 
-	\subsubsection{Numbering Requirement}
+	\subsection{Numbering Requirement}
 	Both \texttt{PUMP\_SOURCE\_IDNR} and \texttt{PUMP\_TARGET\_IDNR} must be higher than the pump's own \texttt{IDNR} since the pumped water is moved before either reservoir each time step.
 
     \begin{figure}[h!]
         \centering
-        \includegraphics[width=1\linewidth]{figures/PUMP_System.png}
+        
+        %%% \includegraphics[width=1\linewidth]{figures/PUMP_System.png}
+        \includegraphics[width=1\linewidth]{figures/pumpsystem2.png}
+        
         \caption{Schematic of the \texttt{Mini\_pump\_test} system, and how the nodes are connected in the topology. \texttt{IDNR} 0 is the pump, and \texttt{IDNR} 3 is the power station. This illustrates how a pump can move water without following the normal rule of water flow from a node with a lower to a higher \texttt{IDNR}, but may move water between tow nodes with \texttt{IDNR} higher than itself.}
         \label{fig:Pump_system}
     \end{figure}
 
     \newpage
+
+	\section{Intake}
+	\label{subsec:intake}
+
+	The \texttt{INTAKE} node models how water from a creek/stream is taken into an inlet tunnel. Typically the intake is a small dam or pond in the river. The intake is designed so it will capture all flow levels below a specified capture capacity [m$^3$/s].
+	
+	in the same time step via the downstream connection (\texttt{DOWNLINK\_IDNR}).
+
+	An intake node receives water through its upstream incoming natural streamflow. The intake will collect all the inflowing water up to a threshold. 
+	
+	connection. The upstream reservoir passes its water surface elevation at the start and end of
+	the time step to the power station, which uses these values to compute the available hydraulic
+	head (Hnetto). Figure \ref{fig:intake} illustrates how an intake is connected. 
+
+	\begin{figure}[h]
+		\centering
+		\includegraphics[width=0.4\textwidth]{./figures/intake.pdf}
+		\caption{Schematic of node type Intake}
+		\label{fig:intake}
+	\end{figure}
+    
+   
+	\noindent The parameters are:
+	\begin{center}
+		\begin{tabular}{lll}
+			\hline
+			Keyword & Type & Description \\
+			\hline
+			\texttt{FLOODWATER\_IDNR }   & int   & Id number to downstream node receiving flood water \\
+			\texttt{CAPTURE\_CAPACITY}   & float & Capture capacity of intake  [m$^3$/s]\\
+			\texttt{CAPCAP\_IDNR}        & int   & Id number to downstream node receiving captured water \\
+			\texttt{HATCH\_RELEASE}      & float & Amount of water released  [m$^3$/s] \\
+			\texttt{HATCHREL\_IDNR}      & int   & Id number of downstream node receiving \\
+			\texttt{VOLUME}              & float & Total volume of intake reservoir [Mm$^3$] \\
+			\hline
+		\end{tabular}
+	\end{center}
+
+   
+    \newpage
+    
+
+\section{Automatic Differentiation (AD)}
+\label{sec:automatic-differentiation}
+
+HERSS includes a manually implemented adjoint, or reverse-mode derivative,
+for calculating sensitivities of the simulation value function. This is not a
+general-purpose automatic-differentiation package: the forward simulation
+remains the normal HERSS simulation, while reverse equations are implemented
+for supported node and routing operations. The adjoint uses double-precision
+values.
+
+\subsection{Value function and gradients}
+
+The differentiated objective is the HERSS value function
+\begin{equation}
+	\mathcal{V}
+	=
+	\sum_{n=1}^{N_{\mathrm{nodes}}}
+	\sum_{t=0}^{T-1}
+	\left(\mathrm{income}_{n,t}-\mathrm{cost}_{n,t}\right)
+	+ \mathrm{restprice}\, E_{\mathrm{remaining}},
+\end{equation}
+where $E_{\mathrm{remaining}}$ is the energy value assigned to active water
+remaining in the river system at the end of the simulation. The remaining
+energy is calculated using the local energy equivalents of the downstream
+power stations (or, for systems without power stations, the reservoir energy
+equivalents).
+
+A gradient named \texttt{x\_grad} denotes
+\begin{equation}
+	\texttt{x\_grad} = \frac{\partial \mathcal{V}}{\partial x}.
+\end{equation}
+For example, \texttt{action\_grad} is the change in value function per unit
+change in an action. Gradients are sensitivities of the value function, not
+new simulated state variables.
+
+\subsection{How the adjoint is evaluated}
+
+The adjoint is evaluated after the forward simulation and value-function
+calculation. HERSS first clears previous gradients, then seeds the reverse
+pass with the derivatives of the objective: each timestep's node profit has
+a seed of one, and the terminal reservoir states receive additional seeds
+from the value assigned to remaining active water.
+
+The backward pass then traverses timesteps in reverse order and nodes in
+reverse topological order. Each node propagates the gradients it receives
+to its upstream inputs, state variables, and actions. This includes
+propagation through time-dependent reservoir and channel states. The reverse
+ordering is important: downstream contributions must be accumulated before
+the corresponding upstream node is processed.
+
+The equations include smooth versions of selected limits and thresholds so
+that useful derivatives are available near operating constraints. As a
+result, gradients near these transitions describe the implemented smoothed
+model; they need not be identical to derivatives of an otherwise equivalent
+model using hard, discontinuous limits.
+
+\subsection{Enabling gradient output}
+
+Set the following keyword in the global configuration file:
+\begin{verbatim}
+	AUTODIFF TRUE
+\end{verbatim}
+The default is \texttt{FALSE}. With AD enabled, HERSS performs its normal
+simulation, calculates the value function, runs the backward pass, and writes
+a gradient output file under \texttt{OUTPUTDIR}, named
+\texttt{gradients\_<SYSTEMNAME>.txt}.
+
+The output is grouped by node and includes available gradients such as
+\texttt{profit\_grad}, \texttt{Power\_grad}, \texttt{res\_Mm3\_grad},
+\texttt{res\_masl\_grad}, \texttt{Hbrutto\_grad}, and
+\texttt{up\_inflow\_grad}. Power-station action sensitivities are reported
+per generator; reservoir output includes the sensitivity to the initial
+reservoir volume. The file is intended for inspection. Its current layout
+is not a regular CSV table, so scripts should not assume fixed columns or
+one row per timestep without first checking the output.
+
+\subsection{Optimizing actions with Adam}
+
+HERSS can use the adjoint gradients to optimize actions with the Adam
+optimizer. Set \texttt{ADAM\_OPTIMIZER TRUE} in the global configuration.
+The optimizer maximizes the value function by minimizing its negative. By
+default, it optimizes generator actions; the selectable control groups are
+\texttt{GENERATORS}, \texttt{HATCH}, and \texttt{ALL}. Generator and hatch
+actions are constrained to the interval $[0,1]$.
+
+For example:
+\begin{verbatim}
+	ADAM_OPTIMIZER TRUE
+	OPTIMIZE_CONTROLS GENERATORS
+	LEARNING_RATE 0.02
+	MAX_ITERATIONS 1000
+	PATIENCE 100
+	START_ACTIONS FILE
+	OPTIMIZED_ACTIONFILE actions_optimized.txt
+\end{verbatim}
+The iteration limit, learning rate, and other optimizer settings can be
+adjusted in the global file. The learning rate decays during the run, and
+the action bounds are enforced after each update. Adam stops at the iteration
+limit or when a configured stopping condition is met. It writes the optimization
+history and optimized actions under \texttt{OUTPUTDIR}. HERSS then runs its
+normal output sequence using the optimized actions.
+
+\subsection{Example datasets}
+
+The \texttt{ad\_mini\_utahps} dataset is a compact daily example with one
+reservoir, one power station, and a routed channel. Its global file enables
+gradient output but leaves Adam optimization commented out. It is suitable
+for inspecting the gradients produced by a forward run.
+
+The \texttt{ad\_utahps\_hourly} dataset demonstrates the adjoint and
+optimization on a larger hourly system. Its global file enables both
+\texttt{AUTODIFF} and \texttt{ADAM\_OPTIMIZER}; it optimizes the generator
+actions, writes an Adam history file and an optimized action file, and then
+runs HERSS with those actions. The example contains four power stations and
+8,760 hourly steps.
+
+\subsection{Current limitations}
+
+The adjoint is implemented only for supported model operations; enabling
+\texttt{AUTODIFF} does not make every HERSS feature differentiable. In
+particular, the reservoir backward pass requires reservoir geometry and a
+spillway, and does not support reservoir curves, fast overflow, overflow
+curves, or connected pumps. Pump and intake backward methods are not
+implemented. Channel backward propagation currently supports routing
+methods A (cascaded linear reservoirs), B (lagged cascaded linear reservoirs),
+and C (nonlinear reservoir cascade), subject to the channel configuration
+being supported by the code. Check the topology and node features before
+using gradients for optimization.
+
+The adjoint tests compare supported gradients with finite-difference
+estimates on selected cases. For a new topology or feature combination,
+validate its gradients against finite differences before relying on them
+for optimization.
+
+
+
+
+    \pagebreak 
+    
+    
+    
+    
 	\section{Input}
 	This section describes in more detail the input files required to run HERSS. To some extent it is a repetition of what was said in earlier chapters. Feel free to skip it or have quick look \smiley{}. An efficient way to learn about the input files and their format is to just open the testdata and use it as a starting point in your own project. 
 	
@@ -1706,6 +2077,22 @@
 
 
 
+	\section{Testdata UTAHPS Intake}
+	We will now explore the test dataset provided in the folder: \folder{./utahps\_intake/}.
+	The node structure and the topology of this dataset is illustrated in Figure \ref{fig:intake1}. 
+
+	The system has xxxx
+	
+	\begin{figure}[h]
+	\centering
+	\includegraphics[width=0.85\textwidth]{./figures/intake1.pdf}
+	\caption{Intake nodestructure}
+	\label{fig:intake1}
+	\end{figure}
+
+
+
+
 	\section{Running HERSS from Python}
 	\label{sec:python}
 
@@ -1974,7 +2361,179 @@
 	\end{figure}
 
 
+	\pagebreak 
 	
+\chapter{Topology Editor}
+\label{chap:topology-editor}
+
+The HERSS Topology Editor is a graphical application for creating,
+inspecting and editing river-system topology files. It displays
+reservoirs, power stations, channels, intakes and pumps as a connected
+network, making it easier to understand and modify a dataset.
+
+The editor is a separate Python application. It does not perform
+simulations: HERSS remains the simulation engine. In addition to
+topology editing, the application can display results from completed
+HERSS runs. The editor is under active development.
+
+\section{Installing the Python Environment}
+
+The editor requires Python 3.11 or newer. The requirements file, \\ 
+\texttt{freeze\_topoed\_requirements.txt}, records the package versions
+used in the prepared environment. Installing from this file avoids
+automatically selecting the latest versions of the dependencies.
+
+The following commands are for Linux. From the HERSS repository root,
+enter the editor directory, create a dedicated virtual environment,
+and install the recorded requirements:
+
+\begin{lstlisting}
+	cd herss-topology-editor
+	python3 -m venv .venv
+	.venv/bin/python -m pip install -r freeze_topoed_requirements.txt
+\end{lstlisting}
+
+An internet connection and Git are required. The requirements file
+includes an editable Git installation of the editor at a specific
+commit, together with pinned dependencies such as PySide6, NumPy and
+pyqtgraph. It also includes testing tools.
+
+Although the editor supports Python 3.11 or newer, the selected Python
+version must also be supported by the pinned dependency versions.
+For closest reproducibility, use the same Python version as the
+environment from which the requirements file was generated.
+
+Check the installed packages for dependency conflicts with:
+
+\begin{lstlisting}
+	.venv/bin/python -m pip check
+\end{lstlisting}
+
+\paragraph{Using the local editor source instead.}
+The requirements installation uses the Git revision recorded in the
+file, not necessarily the source in the current working directory.
+To use the local editor source with the installed dependencies,
+run the following additional command from the editor directory:
+
+\begin{lstlisting}
+	.venv/bin/python -m pip install --no-deps -e .
+\end{lstlisting}
+
+This replaces the editor installation with an editable installation
+of the local source. It does not reinstall dependencies; the local
+source must therefore remain compatible with the installed versions.
+
+\section{Starting the Editor}
+
+Start the application and optionally provide a topology filename:
+
+\begin{lstlisting}
+	.venv/bin/topoed /path/to/topology.txt
+\end{lstlisting}
+
+To start with no file loaded, use:
+
+\begin{lstlisting}
+	.venv/bin/topoed
+\end{lstlisting}
+
+Then select \textbf{File > Open} to load an existing topology file.
+
+\section{Viewing and Editing a Topology}
+
+The \textbf{Topology} tab contains the graphical canvas and the
+\textbf{Nodes}, \textbf{Properties} and \textbf{Issues} panels.
+Selecting a node on the canvas or in the node list displays its
+parameters.
+
+A typical editing workflow is:
+
+\begin{enumerate}
+	\item Open an existing topology, or select \textbf{File > New}
+	and use \textbf{Edit > Add node} to create a system.
+	
+	\item Drag nodes to arrange the diagram. Drag empty canvas space
+	to pan, and use \textbf{Ctrl + mouse wheel} to zoom.
+	\textbf{View > Fit to window} displays the complete network.
+	\textbf{View > Auto layout} arranges the nodes automatically.
+	
+	\item Edit node parameters in the \textbf{Properties} panel.
+	Dedicated forms are available for reservoirs, power stations,
+	channels and intakes. Pump parameters and fields not covered
+	by the forms can be edited in the \textbf{Raw text} tab.
+	
+	\item Connect nodes by dragging from the dot on a node's right
+	edge to another node. For a reservoir, choose the appropriate
+	outlet when prompted. Connections can also be changed in the
+	Properties panel. Replace generated placeholder parameters
+	with appropriate values before running HERSS.
+	
+	\item Review the \textbf{Issues} panel, then use
+	\textbf{File > Save} or \textbf{File > Save As}.
+\end{enumerate}
+
+Validation runs automatically when the topology is loaded or edited.
+It reports problems including duplicate node IDs, references to
+missing nodes and invalid pump ordering. HERSS simulates nodes in
+ascending ID order; a pump must have a lower ID than both its source
+and target reservoirs. The editor does not silently renumber nodes.
+Editor validation does not replace checking the input with HERSS.
+
+Moving a node changes only its graphical position, not its ID or
+simulation parameters. Layout information is saved separately as
+\texttt{<topology filename>.layout.json}. The topology remains a
+HERSS text file, with comments and unrecognised fields preserved.
+
+Figures~\ref{fig:topoed1} and~\ref{fig:topoed2} show example datasets
+displayed in the editor.
+
+\begin{figure}[htbp]
+	\centering
+	\includegraphics[width=\textwidth]{figures/topoed1}
+	\caption{An example HERSS dataset displayed in the Topology
+		Editor. Nodes represent system components, and links show
+		their connections.}
+	\label{fig:topoed1}
+\end{figure}
+
+\begin{figure}[htbp]
+	\centering
+	\includegraphics[width=\textwidth]{figures/topoed2}
+	\caption{A second HERSS dataset shown in the Topology Editor.
+		The diagram can be rearranged without changing simulation
+		parameters or node IDs.}
+	\label{fig:topoed2}
+\end{figure}
+
+\section{Displaying Simulation Results}
+
+Run HERSS separately, then select the \textbf{Configurator} tab
+and specify the run's \textbf{Results folder}. The editor reads
+node CSV files with an optional \texttt{manifest.json}, and supports
+legacy node text files as a fallback. Enable node output in the
+HERSS global file using \texttt{WRITE\_NODEFILES 1}.
+
+The editor attempts to locate results automatically. An explicit
+folder can be selected using \textbf{Browse}. The status message
+reports missing results, topology mismatches and results older
+than the topology file.
+
+In the Configurator, define plot titles, variables and nodes.
+A series can select one node or all nodes of a given type.
+Selected series may be combined using a mean or, for suitable
+additive quantities, a sum.
+
+The \textbf{Plot} tab displays three panels containing stacks of
+plots with a shared time axis. An editable system-summary preset
+provides a starting point. Plot settings are saved using
+\textbf{File > Save} in
+\texttt{<topology filename>.plots.json}, separately from the topology.
+The Configurator and Plot tabs do not modify the topology.
+
+	
+
+
+	\pagebreak	
 	%---------------------------------------------------------------------
 	%---------------------------------------------------------------------
 	\chapter{Known Issues and Future Work}

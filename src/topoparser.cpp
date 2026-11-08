@@ -25,8 +25,6 @@ string TopologyParser::trim(const std::string& str) {
 }
 
 
-
-
 bool TopologyParser::loadFile(const std::string& filename) {
 
     std::ifstream file(filename);
@@ -50,6 +48,3 @@ bool TopologyParser::loadFile(const std::string& filename) {
 }
 //--------------------------------------------------------------------------------
 
-
-
-// ... other implementations
