@@ -465,6 +465,17 @@ void Herss::SetPointers() {
 
 
 
+        // TAILWATER_IDNR: let the tailwater reservoir push its start/end MASL into the station.
+        if( rs->nodes[n]->nodetype == NodeType::PSTATION ) {
+            Powerstation* ps = static_cast<Powerstation*>(rs->nodes[n]);
+            if(ps->tailwater_in_use) {
+                if(ps->tailwater_idnr > (this->nr_nodes-1) || rs->nodes[ps->tailwater_idnr]->nodetype != NodeType::RESERVOIR) {
+                    LOG_WARN("ERROR: PSTATION node " + std::to_string(int(n)) + " (" + ps->nodename + ") TAILWATER_IDNR is not a RESERVOIR.");
+                    LOG_ERR("Please check TAILWATER_IDNR in the topology file.");
+                }
+                static_cast<Reservoir*>(rs->nodes[ps->tailwater_idnr])->ptr_stations_as_tailwater.push_back(ps);
+            }
+        }
     }
 }
 /////////////////////////////////////////////////////////////////////
@@ -880,6 +891,16 @@ int Herss::Simulate() {
         // so calculate them after all nodes have completed this timestep.
         for(size_t p = 0; p < gc->nr_pumps; p++) {
             rs->pumps[p].CalcPowerAndCost(t);
+        }
+
+        // A station with TAILWATER_IDNR needs its tailwater reservoir's end level,
+        // which exists only now. Re-run it so head, power and income use the final levels.
+        for(size_t p = 0; p < gc->nr_pstations; p++) {
+            if(rs->pstations[p].tailwater_in_use) {
+                rs->pstations[p].tailwater_final_pass = true;
+                rs->pstations[p].Simulate(t);
+                rs->pstations[p].tailwater_final_pass = false;
+            }
         }
     }
 

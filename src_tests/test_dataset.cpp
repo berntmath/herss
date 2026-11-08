@@ -2,6 +2,8 @@
 #include "herss.h"
 #include <string>
 #include <fstream>
+#include <sstream>
+#include <filesystem>
 #include <cmath>
 
 // Test fixture for Dataset tests
@@ -185,5 +187,70 @@ TEST_F(DatasetTest, DateValidationWorksCorrectly)
     
     // If we get here without exit, the dates matched correctly
     SUCCEED();
+}
+
+// Test: more action columns than nodes. src_tests/pump_test/ (5 nodes) with pstation_A given
+// 4 generators has 6 action columns, so Dataset::action needs more than nr_nodes slots per step.
+TEST(DatasetActionColumnsTest, MoreActionColumnsThanNodesAreReadIntact)
+{
+    const std::string src = "../src_tests/pump_test/";
+    const std::string dir = ::testing::TempDir() + "pump_test_4gen/";
+    std::filesystem::create_directories(dir);
+    for(const char* f : {"inflowseries.txt", "pricefile.txt", "start_state.txt"}) {
+        std::filesystem::copy_file(src + f, dir + f, std::filesystem::copy_options::overwrite_existing);
+    }
+
+    // Topology: generator 0's block repeated as generators 1-3.
+    std::ostringstream topo;
+    topo << std::ifstream(src + "topology.txt").rdbuf();
+    std::string s = topo.str();
+    s.replace(s.find("NR_GENERATORS 1"), 15, "NR_GENERATORS 4");
+    const size_t a = s.find("GENERATOR 0");
+    const size_t b = s.find("STATIC_GENERATOR_EFFICIENCY");
+    std::string extra;
+    for(int g = 1; g <= 3; g++) {
+        extra += s.substr(a, b - a).replace(0, 11, "GENERATOR " + std::to_string(g));
+    }
+    s.insert(b, extra);
+    std::ofstream(dir + "topology.txt") << s;
+
+    // Actions: same dates, one distinct value per column.
+    std::ifstream in(src + "actions.txt");
+    std::ofstream out(dir + "actions.txt");
+    std::string line;
+    std::getline(in, line);
+    out << "Date_NodeID\t2_0\t2_1\t2_2\t2_3\t3\t0\n";
+    while(std::getline(in, line)) {
+        if(!line.empty()) out << line.substr(0, line.find('\t')) << "\t0.125\t0.25\t0.5\t0.75\t0.375\t0.625\n";
+    }
+    out.close();
+
+    GlobalConfig* gc = new GlobalConfig();
+    gc->globalfile = src + "global.txt";
+    gc->readGlobalFile();
+    gc->inputdir = dir;
+    gc->SetDirectoriesAndFilenames();
+    gc->Diagnose();
+    gc->checkNrSteps();
+    ASSERT_EQ(gc->n_action_nodes_from_topology, 6u);
+    ASSERT_GT(gc->n_action_nodes_from_topology, gc->nr_nodes);
+
+    Dataset* data = new Dataset(gc);
+    data->readAllData();
+    Herss* herss_obj = new Herss(gc);
+    herss_obj->prepaireSimulation(data);
+    herss_obj->rs->DiagnoseRiversystemConfiguration();
+    herss_obj->Simulate();
+
+    const double gen[4] = {0.125, 0.25, 0.5, 0.75};
+    for(size_t t = 0; t < gc->stps; t++) {
+        for(size_t g = 0; g < 4; g++) EXPECT_DOUBLE_EQ(herss_obj->GetAction(2, g, t), gen[g]);
+        EXPECT_DOUBLE_EQ(herss_obj->GetAction(3, 0, t), 0.375); // reservoir_B hatch
+        EXPECT_DOUBLE_EQ(herss_obj->GetAction(0, 0, t), 0.625); // pump_AB
+    }
+
+    delete herss_obj;
+    delete data;
+    delete gc;
 }
 

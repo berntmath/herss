@@ -7,7 +7,7 @@ Organization: Å Energi, www.ae.no
 This software is released under the MIT license:
 Copyright (c) <2024> <Å Energi, Bernt Viggo Matheussen>
 
-Permanent regression tests for the PUMP node type. Two groups:
+Permanent regression tests for the PUMP node type. Three groups:
 
 1. PumpUnitTest - lightweight, no file I/O, mirrors the style of
    test_reservoir.cpp/test_riversystem.cpp (construct a Pump directly, set
@@ -20,9 +20,14 @@ Permanent regression tests for the PUMP node type. Two groups:
    water, decrease the source reservoir's water by the exact same amount
    (mass conservation), and increase tot_remaining_MWh by exactly
    moved_Mm3 * LOCAL_ENERGY_EQUIVALENT.
+
+3. TailwaterTest - the same fixture with TAILWATER_IDNR on pstation_A: a closed
+   pump-and-release loop must lose energy.
 ********************************************************************************/
 
 #include <gtest/gtest.h>
+#include <fstream>
+#include <sstream>
 #include "herss.h"
 
 // ================================================================
@@ -432,4 +437,76 @@ TEST_F(PumpIntegrationTest, PumpFlowSeriesAreResetBetweenSimulations) {
     }
 
     herss_obj->CheckWaterBalance();
+}
+
+// ================================================================
+// TailwaterTest - src_tests/pump_test/ with its topology rewritten to a temp file:
+// POWSTAT_MASL moved down to LRW(reservoir_B), so the fixed datum overstates the
+// turbine head, plus the given TAILWATER_IDNR line on pstation_A.
+// ================================================================
+
+class TailwaterTest : public ::testing::Test {
+protected:
+    GlobalConfig* gc = nullptr;
+    Dataset* data = nullptr;
+    Herss* herss_obj = nullptr;
+
+    void Load(const std::string& tailwater_idnr) {
+        gc = new GlobalConfig();
+        gc->globalfile = "../src_tests/pump_test/global.txt";
+        gc->readGlobalFile();
+        gc->SetDirectoriesAndFilenames();
+
+        std::ostringstream topo;
+        topo << std::ifstream(gc->topologyfile).rdbuf();
+        std::string s = topo.str();
+        const std::string datum = "POWSTAT_MASL 70.0";
+        s.replace(s.find(datum), datum.size(), "POWSTAT_MASL 60.0\nTAILWATER_IDNR " + tailwater_idnr);
+        gc->topologyfile = ::testing::TempDir() + "pump_test_tailwater_topology.txt";
+        std::ofstream(gc->topologyfile) << s;
+
+        gc->Diagnose();
+        gc->checkNrSteps();
+        data = new Dataset(gc);
+        data->readAllData();
+        herss_obj = new Herss(gc);
+        herss_obj->prepaireSimulation(data);
+        herss_obj->rs->DiagnoseRiversystemConfiguration();
+    }
+
+    void TearDown() override {
+        delete herss_obj;
+        delete data;
+        delete gc;
+    }
+};
+
+// Pump B->A at t=0, release the same volume A->B at t=1, nothing else moving. Both legs then
+// average the same four reservoir surfaces, so the static heads must match, and the turbine
+// can never return more energy than the pump used.
+TEST_F(TailwaterTest, ClosedLoopRoundTripLosesEnergy) {
+    Load("3");
+    Pump* pump = &herss_obj->rs->pumps[0];
+    Powerstation* ps = static_cast<Powerstation*>(herss_obj->rs->nodes[2]);
+
+    for(size_t t = 0; t < gc->stps; t++) {
+        for(size_t n = 0; n < gc->nr_nodes; n++) herss_obj->SetInflowInNode(t, n, 0.0);
+        herss_obj->SetAction(0, 0, t, t == 0 ? 1.0 : 0.0); // pump, 2.0 m3/s
+        herss_obj->SetAction(2, 0, t, t == 1 ? 1.0 : 0.0); // pstation_A, 2.0 m3/s
+        herss_obj->SetAction(3, 0, t, 0.0);                 // reservoir_B hatch closed
+    }
+    // Upper low, lower high: without tracking the turbine would return more than the pump used.
+    herss_obj->SetReservoir_Init_fr(1, 0.1);
+    herss_obj->SetReservoir_Init_fr(3, 0.9);
+    herss_obj->Simulate();
+
+    const double energy_in_MWh  = -pump->S->Power[0];
+    const double energy_out_MWh = ps->S->Power[1];
+    ASSERT_GT(energy_out_MWh, 0.0);
+    EXPECT_NEAR(ps->S->Hbrutto[1], pump->S->Hbrutto[0], 1e-9);
+    EXPECT_LT(energy_out_MWh, energy_in_MWh);
+}
+
+TEST_F(TailwaterTest, TailwaterIdnrNotAReservoir_Dies) {
+    EXPECT_DEATH(Load("4"), ".*"); // node 4 is the channel elv
 }
